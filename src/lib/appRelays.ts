@@ -35,7 +35,7 @@ export const SEARCH_RELAYS = [
 /* Custom search relays (user-managed, localStorage)                   */
 /* ------------------------------------------------------------------ */
 
-const LS_CUSTOM_SEARCH_RELAYS = '0xsearchstr:search-relays:custom';
+const LS_CUSTOM_SEARCH_RELAYS = 'uncaged:search-relays:custom';
 
 function readCustomSearchRelays(): string[] {
   try {
@@ -95,8 +95,8 @@ export function removeCustomSearchRelay(url: string): void {
 }
 
 /**
- * The effective search relay pool: 0xSearchstr's default NIP-50 relays
- * first, then the user's custom relays (deduped).
+ * The effective search relay pool: the default NIP-50 relays first,
+ * then the user's custom relays (deduped).
  */
 export function getSearchRelayUrls(): string[] {
   const seen = new Set<string>();

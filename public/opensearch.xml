@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OpenSearch descriptor — lets users add this engine as a browser search
+  provider. Replace the two URLs below with your deployed origin.
+-->
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-  <ShortName>0xSearchstr</ShortName>
-  <Description>Decentralized search aggregator — Nostr first, web when needed.</Description>
+  <ShortName>Uncaged Engine</ShortName>
+  <Description>Nostr-native search — NIP-50 relay search + a shared decentralized web index.</Description>
   <InputEncoding>UTF-8</InputEncoding>
-  <Image width="16" height="16" type="image/svg+xml">https://0xsearchstr.shakespeare.wtf/favicon.svg</Image>
-  <Url type="text/html" method="get" template="https://0xsearchstr.shakespeare.wtf/?q={searchTerms}"/>
+  <Image width="16" height="16" type="image/svg+xml">https://example.com/favicon.svg</Image>
+  <Url type="text/html" method="get" template="https://example.com/?q={searchTerms}"/>
 </OpenSearchDescription>

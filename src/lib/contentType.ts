@@ -1,9 +1,7 @@
 /**
- * Content-type detection for URLs — inspired by Nostra Search
- * (github.com/nostrasearch/nostrasearch.github.io, GPL-3.0).
- * Fresh implementation of the same idea: classify a link by protocol,
- * host, and file extension so results can show type badges and onion
- * links can be routed to the Tor tab with a warning.
+ * Content-type detection for URLs — classify a link by protocol, host,
+ * and file extension so results can show type badges (Torrent, IPFS,
+ * Video, PDF, .onion, …) and submissions can be validated.
  */
 
 export type ContentType =

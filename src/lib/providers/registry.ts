@@ -3,60 +3,36 @@
  *
  * Add a new provider:
  *   1. Create `src/lib/providers/my-provider.ts` implementing `SearchProvider`
- *   2. Import it here and add to the `ALL_PROVIDERS` array
+ *   2. Import it here and add it to `ALL_PROVIDERS`
  *   3. Done — the orchestrator picks it up automatically
+ *
+ * The three providers below are the pure core of the engine:
+ *   - web-index: the shared decentralized document index (SIP-01, kind 39697)
+ *   - nostr:     live NIP-50 full-text search across search relays
+ *   - community: user-curated link submissions (kind 30078)
  */
 import type { SearchProvider, SearchSource } from './types';
-import { cachedIndexProvider } from './cached-index';
 import { webIndexProvider } from './web-index';
 import { nostrProvider } from './nostr';
 import { communityProvider } from './community';
-import { searxngProvider } from './searxng';
-import { duckduckgoProvider } from './duckduckgo';
-import { torProvider } from './tor';
-import { wikipediaProvider } from './wikipedia';
-import { hackerNewsProvider } from './hacker-news';
-import { stackOverflowProvider } from './stackoverflow';
 
 /**
  * All registered search providers, in priority order.
  *
- * The cached-index + web-index providers run first — if the query (or the
- * pages it surfaces) were indexed before, results come from Nostr instantly.
- * All other providers still run in parallel, and their results get merged +
- * deduped with the index.
+ * The web index runs first — if the pages were indexed before, results come
+ * from Nostr instantly. All providers still run in parallel; their results
+ * get merged + deduped by the orchestrator.
  */
 export const ALL_PROVIDERS: SearchProvider[] = [
   webIndexProvider,
-  cachedIndexProvider,
   nostrProvider,
   communityProvider,
-  searxngProvider,
-  duckduckgoProvider,
-  wikipediaProvider,
-  hackerNewsProvider,
-  stackOverflowProvider,
-  torProvider,
 ];
 
 /** Get providers that contribute to a given source tab. */
 export function getProvidersForSource(source: SearchSource | 'all'): SearchProvider[] {
   if (source === 'all') return ALL_PROVIDERS;
   return ALL_PROVIDERS.filter((p) => p.source === source || p.additionalSources?.includes(source));
-}
-
-/**
- * Get providers filtered by Privacy Mode.
- * When `privacyOnly` is true, only Nostr-tier providers are returned —
- * no clearnet APIs, no CORS proxies, no third-party servers.
- */
-export function getProvidersForPrivacy(
-  source: SearchSource | 'all',
-  privacyOnly: boolean,
-): SearchProvider[] {
-  const providers = getProvidersForSource(source);
-  if (!privacyOnly) return providers;
-  return providers.filter((p) => p.privacy === 'nostr');
 }
 
 /** Get a provider by ID. */

@@ -1,7 +1,7 @@
 {
-  "name": "0xSearchstr",
-  "short_name": "0xSearchstr",
-  "description": "Federated, privacy-first search across Nostr, the clearnet, and dark web services.",
+  "name": "Uncaged Engine",
+  "short_name": "Uncaged",
+  "description": "A Nostr-native search engine template — NIP-50 relay search, a shared decentralized web index, and community-curated links.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f0f18",

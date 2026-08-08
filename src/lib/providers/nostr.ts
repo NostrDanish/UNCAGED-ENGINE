@@ -185,8 +185,6 @@ export const nostrProvider: SearchProvider = {
   id: 'nostr',
   name: 'Nostr',
   source: 'nostr',
-  privacy: 'nostr',
-  privacyNote: 'NIP-50 search over WebSocket. Relay operators see the query + your IP, but no account is linked.',
 
   async search({ query, signal, limit = 40 }: SearchOptions): Promise<ProviderSearchResponse> {
     if (!query.trim()) return { results: [] };

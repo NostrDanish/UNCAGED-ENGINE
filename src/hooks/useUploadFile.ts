@@ -2,12 +2,18 @@ import { useMutation } from "@tanstack/react-query";
 import { BlossomUploader } from '@nostrify/nostrify/uploaders';
 
 import { useCurrentUser } from "./useCurrentUser";
-import { useAppContext } from "./useAppContext";
-import { getEffectiveBlossomServers } from "@/lib/appBlossom";
+
+/**
+ * Default Blossom media servers, used for avatar uploads during signup.
+ * Swap these for your own servers if you self-host media.
+ */
+const DEFAULT_BLOSSOM_SERVERS = [
+  'https://blossom.ditto.pub/',
+  'https://blossom.primal.net/',
+];
 
 export function useUploadFile() {
   const { user } = useCurrentUser();
-  const { config } = useAppContext();
 
   return useMutation({
     mutationFn: async (file: File) => {
@@ -15,17 +21,8 @@ export function useUploadFile() {
         throw new Error('Must be logged in to upload files');
       }
 
-      const servers = getEffectiveBlossomServers(
-        config.blossomServerMetadata,
-        config.useAppBlossomServers,
-      );
-
-      if (servers.length === 0) {
-        throw new Error('No Blossom servers configured');
-      }
-
       const uploader = new BlossomUploader({
-        servers,
+        servers: DEFAULT_BLOSSOM_SERVERS,
         signer: user.signer,
       });
 

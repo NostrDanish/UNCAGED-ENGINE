@@ -35,30 +35,6 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  --color-nostr: var(--nostr);
-  --color-nostr-foreground: var(--nostr-foreground);
-  --color-clearnet: var(--clearnet);
-  --color-clearnet-foreground: var(--clearnet-foreground);
-  --color-tor: var(--tor);
-  --color-tor-foreground: var(--tor-foreground);
-  --color-i2p: var(--i2p);
-  --color-i2p-foreground: var(--i2p-foreground);
-
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
@@ -129,31 +105,6 @@
   --border: hsl(214 32% 91%);
   --input: hsl(214 32% 91%);
   --ring: hsl(263 70% 58%);
-
-  --chart-1: hsl(263 70% 58%);
-  --chart-2: hsl(173 58% 39%);
-  --chart-3: hsl(197 37% 24%);
-  --chart-4: hsl(43 74% 66%);
-  --chart-5: hsl(27 87% 67%);
-
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5% 26%);
-  --sidebar-primary: hsl(263 70% 58%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 5% 96%);
-  --sidebar-accent-foreground: hsl(240 6% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(263 70% 58%);
-
-  /* Source colors */
-  --nostr: hsl(263 70% 58%);
-  --nostr-foreground: hsl(0 0% 100%);
-  --clearnet: hsl(173 58% 39%);
-  --clearnet-foreground: hsl(0 0% 100%);
-  --tor: hsl(275 60% 50%);
-  --tor-foreground: hsl(0 0% 100%);
-  --i2p: hsl(30 80% 50%);
-  --i2p-foreground: hsl(0 0% 100%);
 }
 
 /* ─── Dark theme (default) ─── */
@@ -185,134 +136,6 @@
   --border: hsl(230 16% 18%);
   --input: hsl(230 16% 18%);
   --ring: hsl(263 70% 58%);
-
-  --chart-1: hsl(263 70% 58%);
-  --chart-2: hsl(160 60% 45%);
-  --chart-3: hsl(30 80% 55%);
-  --chart-4: hsl(280 65% 60%);
-  --chart-5: hsl(340 75% 55%);
-
-  --sidebar: hsl(230 21% 8%);
-  --sidebar-foreground: hsl(240 5% 96%);
-  --sidebar-primary: hsl(263 70% 58%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(230 16% 13%);
-  --sidebar-accent-foreground: hsl(240 5% 96%);
-  --sidebar-border: hsl(230 16% 15%);
-  --sidebar-ring: hsl(263 70% 58%);
-
-  /* Source colors */
-  --nostr: hsl(263 70% 58%);
-  --nostr-foreground: hsl(0 0% 100%);
-  --clearnet: hsl(173 58% 45%);
-  --clearnet-foreground: hsl(0 0% 100%);
-  --tor: hsl(275 60% 55%);
-  --tor-foreground: hsl(0 0% 100%);
-  --i2p: hsl(30 80% 55%);
-  --i2p-foreground: hsl(0 0% 100%);
-}
-
-/* ─── Hacker theme (green-on-black terminal) ─── */
-/* Applied as .dark.hacker — inherits dark base, overrides with green accent */
-.hacker {
-  --background: hsl(120 10% 3%);
-  --foreground: hsl(120 60% 75%);
-
-  --card: hsl(120 10% 5%);
-  --card-foreground: hsl(120 60% 75%);
-
-  --popover: hsl(120 10% 5%);
-  --popover-foreground: hsl(120 60% 75%);
-
-  --primary: hsl(120 100% 45%);
-  --primary-foreground: hsl(120 10% 3%);
-
-  --secondary: hsl(120 10% 10%);
-  --secondary-foreground: hsl(120 60% 70%);
-
-  --muted: hsl(120 8% 10%);
-  --muted-foreground: hsl(120 20% 45%);
-
-  --accent: hsl(120 10% 10%);
-  --accent-foreground: hsl(120 60% 70%);
-
-  --destructive: hsl(0 70% 40%);
-  --destructive-foreground: hsl(120 60% 75%);
-
-  --border: hsl(120 15% 12%);
-  --input: hsl(120 15% 12%);
-  --ring: hsl(120 100% 45%);
-
-  --chart-1: hsl(120 100% 45%);
-  --chart-2: hsl(160 80% 40%);
-  --chart-3: hsl(80 70% 45%);
-  --chart-4: hsl(180 60% 40%);
-  --chart-5: hsl(100 90% 50%);
-
-  --sidebar: hsl(120 10% 4%);
-  --sidebar-foreground: hsl(120 60% 70%);
-  --sidebar-primary: hsl(120 100% 45%);
-  --sidebar-primary-foreground: hsl(120 10% 3%);
-  --sidebar-accent: hsl(120 10% 8%);
-  --sidebar-accent-foreground: hsl(120 60% 70%);
-  --sidebar-border: hsl(120 15% 10%);
-  --sidebar-ring: hsl(120 100% 45%);
-
-  /* Source colors — hacker variants */
-  --nostr: hsl(120 100% 45%);
-  --nostr-foreground: hsl(120 10% 3%);
-  --clearnet: hsl(160 80% 40%);
-  --clearnet-foreground: hsl(120 10% 3%);
-  --tor: hsl(80 70% 45%);
-  --tor-foreground: hsl(120 10% 3%);
-  --i2p: hsl(50 80% 45%);
-  --i2p-foreground: hsl(120 10% 3%);
-}
-
-/* Hacker theme: force monospace font everywhere */
-.hacker body {
-  font-family: "JetBrains Mono Variable", ui-monospace, "Cascadia Code", "Fira Code", monospace;
-}
-
-/* Hacker theme: scanline overlay */
-.hacker::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    hsl(120 100% 45% / 0.015) 2px,
-    hsl(120 100% 45% / 0.015) 4px
-  );
-}
-
-/* Hacker theme: text glow on primary text */
-.hacker [data-slot="card-title"],
-.hacker h1, .hacker h2, .hacker h3 {
-  text-shadow: 0 0 8px hsl(120 100% 45% / 0.3);
-}
-
-/* Hacker theme: scrollbar */
-.hacker ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.hacker ::-webkit-scrollbar-track {
-  background: hsl(120 10% 3%);
-}
-
-.hacker ::-webkit-scrollbar-thumb {
-  background: hsl(120 100% 45% / 0.25);
-  border-radius: 3px;
-}
-
-.hacker ::-webkit-scrollbar-thumb:hover {
-  background: hsl(120 100% 45% / 0.4);
 }
 
 @layer base {
@@ -348,7 +171,7 @@
   background: hsl(230 16% 30%);
 }
 
-/* Glow effects — use primary color variable so they adapt to theme */
+/* Glow effects — derived from the primary color so they adapt to the theme */
 @utility glow-primary {
   box-shadow: 0 0 20px color-mix(in srgb, var(--primary) 15%, transparent),
               0 0 40px color-mix(in srgb, var(--primary) 5%, transparent);
@@ -357,15 +180,6 @@
 @utility glow-primary-lg {
   box-shadow: 0 0 30px color-mix(in srgb, var(--primary) 20%, transparent),
               0 0 60px color-mix(in srgb, var(--primary) 8%, transparent);
-}
-
-/* Hacker theme: stronger glow */
-.hacker .glow-primary {
-  box-shadow: 0 0 20px hsl(120 100% 45% / 0.3), 0 0 50px hsl(120 100% 45% / 0.1);
-}
-
-.hacker .glow-primary-lg {
-  box-shadow: 0 0 30px hsl(120 100% 45% / 0.4), 0 0 80px hsl(120 100% 45% / 0.15);
 }
 
 /* Search pulse animation */

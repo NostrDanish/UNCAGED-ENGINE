@@ -30,8 +30,8 @@ export function Layout({ children, minimal = false }: LayoutProps) {
               <Search className="w-4 h-4 text-primary" />
             </div>
             <span className="font-semibold text-lg tracking-tight">
-              <span className="text-primary font-mono">0x</span>
-              <span className="text-foreground">Searchstr</span>
+              <span className="text-foreground">Uncaged</span>
+              <span className="text-primary font-mono">Engine</span>
             </span>
           </Link>
 
@@ -79,15 +79,20 @@ export function Layout({ children, minimal = false }: LayoutProps) {
       <footer className="border-t border-border/50 py-6">
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-primary/70">0x</span>
-            <span>Searchstr</span>
+            <span>Uncaged</span>
+            <span className="font-mono text-primary/70">Engine</span>
             <span className="text-border">|</span>
-            <span>Decentralized search aggregator</span>
+            <span>A Nostr search engine template</span>
           </div>
           <div className="flex items-center gap-4">
-            <Link to="/explore" className="hover:text-foreground transition-colors">Explore</Link>
-            <Link to="/policy" className="hover:text-foreground transition-colors">Content Policy</Link>
-            <Link to="/about" className="hover:text-foreground transition-colors">About</Link>
+            <a
+              href="https://github.com/NostrDanish/UNCAGED-ENGINE"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors"
+            >
+              Source
+            </a>
             <a
               href="https://shakespeare.diy"
               target="_blank"

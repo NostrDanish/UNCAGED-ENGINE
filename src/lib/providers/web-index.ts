@@ -61,8 +61,6 @@ export const webIndexProvider: SearchProvider = {
   id: 'web-index',
   name: 'Web Index',
   source: 'web',
-  privacy: 'nostr',
-  privacyNote: 'Reads the decentralized web index from Nostr relays. Relay operators see the query, but no account is linked.',
 
   async search({ query, signal }: SearchOptions): Promise<ProviderSearchResponse> {
     if (!query.trim()) return { results: [] };
@@ -117,9 +115,9 @@ export const webIndexProvider: SearchProvider = {
         thumbnail: latest.image,
         engine: 'Web Index',
         tags: latest.topics.slice(0, 5),
-        // Cached-index sits at 90, community at 96. Protocol observations rank
-        // just below community curation, boosted slightly by independent
-        // indexer agreement (capped so it can't overtake curated content).
+        // Community curation sits at 96. Protocol observations rank just
+        // below it, boosted slightly by independent indexer agreement
+        // (capped so it can't overtake curated content).
         score: 93 + Math.min(indexerCount - 1, 3),
         nostrEvent: latest.event,
       });

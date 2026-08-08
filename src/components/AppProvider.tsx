@@ -1,7 +1,7 @@
 import { ReactNode, useEffect } from 'react';
 import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
+import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata } from '@/contexts/AppContext';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -21,19 +21,10 @@ const RelayMetadataSchema = z.object({
   updatedAt: z.number(),
 }) satisfies z.ZodType<RelayMetadata>;
 
-// Zod schema for BlossomServerMetadata validation
-const BlossomServerMetadataSchema = z.object({
-  servers: z.array(z.url()),
-  updatedAt: z.number(),
-}) satisfies z.ZodType<BlossomServerMetadata>;
-
 // Zod schema for AppConfig validation
 const AppConfigSchema = z.object({
-  theme: z.enum(['dark', 'light', 'system', 'hacker']),
+  theme: z.enum(['dark', 'light', 'system']),
   relayMetadata: RelayMetadataSchema,
-  blossomServerMetadata: BlossomServerMetadataSchema,
-  useAppBlossomServers: z.boolean(),
-  privacyMode: z.boolean(),
   autoIndex: z.boolean(),
 }) satisfies z.ZodType<AppConfig>;
 
@@ -86,7 +77,7 @@ function useApplyTheme(theme: Theme) {
   useEffect(() => {
     const root = window.document.documentElement;
 
-    root.classList.remove('light', 'dark', 'hacker');
+    root.classList.remove('light', 'dark');
 
     if (theme === 'system') {
       const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
@@ -95,13 +86,6 @@ function useApplyTheme(theme: Theme) {
         : 'light';
 
       root.classList.add(systemTheme);
-      return;
-    }
-
-    // Hacker theme is dark-based, so we add both classes
-    // so that dark-variant styles also apply.
-    if (theme === 'hacker') {
-      root.classList.add('dark', 'hacker');
       return;
     }
 

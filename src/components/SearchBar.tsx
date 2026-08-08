@@ -104,7 +104,6 @@ export function SearchBar({
             // Large: icon-only square on small screens, full "Search" label from sm up.
             // Small: always an icon button (a 36px button can't fit text).
             size === 'large' ? 'h-12 w-12 p-0 sm:w-28 sm:px-6' : 'h-9 w-9 p-0',
-            // Use theme primary variable so hacker theme shows green automatically
             'bg-[var(--primary)] text-[var(--primary-foreground)] hover:brightness-95'
           )}
         >

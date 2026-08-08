@@ -110,7 +110,7 @@ export interface IndexObservationInput {
   tags?: string[];
   language?: string;
   published?: number;
-  source?: string; // indexer software id, e.g. "0xsearchstr-web/1"
+  source?: string; // indexer software id, e.g. "uncaged-engine/1"
 }
 
 export interface UnsignedIndexEvent {
@@ -263,6 +263,6 @@ export function observationFromResult(result: SearchResult): IndexObservationInp
     image: result.thumbnail,
     tags: result.tags,
     published: result.timestamp,
-    source: '0xsearchstr-web/1',
+    source: 'uncaged-engine/1',
   };
 }

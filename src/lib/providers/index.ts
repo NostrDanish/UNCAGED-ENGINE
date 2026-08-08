@@ -9,12 +9,7 @@ export type {
   ProviderSearchResponse,
 } from './types';
 
-export { cachedIndexProvider } from './cached-index';
+export { webIndexProvider } from './web-index';
 export { nostrProvider } from './nostr';
-export { searxngProvider } from './searxng';
-export { duckduckgoProvider } from './duckduckgo';
-export { torProvider } from './tor';
-export { wikipediaProvider } from './wikipedia';
-export { hackerNewsProvider } from './hacker-news';
-export { stackOverflowProvider } from './stackoverflow';
+export { communityProvider } from './community';
 export { ALL_PROVIDERS, getProvidersForSource, getProvider, getAvailableSources } from './registry';

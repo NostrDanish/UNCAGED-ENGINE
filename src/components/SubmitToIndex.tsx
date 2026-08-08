@@ -1,11 +1,10 @@
 /**
  * Submit to Index — let any Nostr user curate the decentralized index.
  *
- * The index isn't just a bot cache — it's community-curated.
+ * The index isn't just machine-built — it's community-curated.
  * Submissions are kind 30078 events signed by the user's own key,
- * readable by every 0xSearchstr (and compatible) client via the
- * Community provider. (Community curation idea inspired by Nostra
- * Search — see src/lib/communityIndex.ts.)
+ * readable by every compatible client via the Community provider
+ * (schema: src/lib/communityIndex.ts, documented in NIP.md).
  */
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';

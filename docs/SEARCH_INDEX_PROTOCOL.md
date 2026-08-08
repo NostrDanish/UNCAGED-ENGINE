@@ -1,9 +1,10 @@
 # Search Index Protocol (SIP-01) — Draft v1
 
-> **Status:** project/protocol draft. This is **not** an official NIP. It is the
-> shared contract between 0xSearchstr, 0xPresearchstr, and any compatible fork
-> or third-party implementation. If the ecosystem adopts it, it may be proposed
-> as a NIP.
+> **Status:** project/protocol draft. This is **not** an official NIP. It is a
+> shared, app-independent contract that any search engine, crawler, relay, or
+> fork may implement. If the ecosystem adopts it, it may be proposed as a NIP.
+> This repository contains the reference implementation
+> (`src/lib/webIndex.ts`, `src/lib/indexerIdentity.ts`).
 
 **One shared decentralized index. Many independent indexers. Many independent
 search nodes. Many independent search engines. No mandatory identity. No single
@@ -63,9 +64,9 @@ registry at time of writing). It is a draft allocation for this protocol.
 ### Why not NIP-78 (kind 30078)
 
 NIP-78 is explicitly for applications "that do not care about
-interoperability" — the opposite of a shared index. Kind 30078 remains in use
-for the **legacy query cache** during migration (see §15) and for genuinely
-app-specific data, but it is not the shared document protocol.
+interoperability" — the opposite of a shared index. Kind 30078 is fine for
+genuinely app-specific data (this template uses it for user-curated community
+submissions, see NIP.md §2), but it is not the shared document protocol.
 
 ## 4. Document identity
 
@@ -180,8 +181,8 @@ the indexer identity. Requirements:
 - Indexer keys are **replaceable**: regenerating creates a new indexer.
   Old events remain signed by the old key and keep their history; reputation
   does not transfer.
-- No single central signing key is authoritative. Server-side autosigners
-  (like the 0xSearchstr worker) are just one more independent indexer.
+- No single central signing key is authoritative. A server-side crawler or
+  autosigner is just one more independent indexer among the browsers.
 
 ## 11. Versioning
 
@@ -226,14 +227,13 @@ existing field without bumping `v`.
   correlate IP/timing; the protocol guarantees key separation, not network
   anonymity.
 
-## 15. Compatibility & migration
+## 15. Compatibility
 
-The legacy 0xsearchstr query-cache (kind 30078, `d:"0xsearchstr:cache:*"`) and
-community submissions (kind 30078, `t:"0xsearchstr-submit"`) remain valid and
-readable. Consumers SHOULD read both the legacy cache and kind 39697, merging
-by normalized URL. Publishers SHOULD prefer 39697 for new document data. The
-legacy cache schema is frozen; it will not gain new fields. There is no flag
-day — old data keeps working.
+Kind 39697 is the canonical document index. Earlier app-specific query caches
+(e.g. kind 30078 `d:"0xsearchstr:cache:*"`, written by historical 0xSearchstr
+deployments) are frozen legacy data: consumers MAY merge them in by
+normalized URL, but new document indexing MUST use kind 39697. There is no
+flag day — old data keeps working, new data uses this protocol.
 
 ## 16. Search node behavior (guidance)
 
@@ -267,7 +267,7 @@ Full event: see §5.
 
 ## 18. References
 
-- Legacy schema & federation notes: [../NIP.md](../NIP.md)
+- Application schemas (community submissions): [../NIP.md](../NIP.md)
 - Reference implementation: `src/lib/webIndex.ts`, `src/lib/indexerIdentity.ts`
 - NIP-01 (events), NIP-19 (bech32), NIP-33 (addressable events),
-  NIP-50 (search capability), NIP-78 (legacy app data)
+  NIP-50 (search capability), NIP-78 (app data)

@@ -1,23 +1,15 @@
 /**
  * Universal result card — renders any SearchResult from any provider.
  *
- * Adapts its visual style based on the result's `source`:
- * - Nostr results: avatar, author, nip19 internal link, hashtags
- * - Web results: domain breadcrumb, external link, engine badge
- * - Wiki results: encyclopedia styling, Wikipedia icon
- * - News results: HN points/comments, author
- * - Tor results: onion badge, warning interstitial
+ * - Nostr profile results: avatar-forward layout
+ * - Other Nostr results (notes, articles, files): internal /:nip19 link
+ * - Web results (index observations, community links): external link card
  */
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Globe, ExternalLink, Zap, Shield, AlertTriangle,
-  BookOpen, Newspaper, Code, User, FileText,
-} from 'lucide-react';
+import { Globe, ExternalLink, Zap, User, FileText } from 'lucide-react';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { OnionWarningDialog } from '@/components/OnionWarningDialog';
 import type { SearchResult } from '@/lib/providers/types';
 import { cn } from '@/lib/utils';
 
@@ -26,46 +18,7 @@ interface UnifiedResultCardProps {
   className?: string;
 }
 
-/** Source icon + color for badges. */
-const SOURCE_STYLE: Record<string, { icon: React.ReactNode; color: string; hoverBorder: string }> = {
-  nostr: {
-    icon: <Zap className="w-3 h-3" />,
-    color: 'border-nostr/30 text-nostr',
-    hoverBorder: 'hover:border-nostr/30',
-  },
-  web: {
-    icon: <Globe className="w-3 h-3" />,
-    color: 'border-clearnet/20 text-clearnet/70',
-    hoverBorder: 'hover:border-clearnet/30',
-  },
-  wiki: {
-    icon: <BookOpen className="w-3 h-3" />,
-    color: 'border-border text-muted-foreground',
-    hoverBorder: 'hover:border-primary/30',
-  },
-  news: {
-    icon: <Newspaper className="w-3 h-3" />,
-    color: 'border-border text-muted-foreground',
-    hoverBorder: 'hover:border-primary/30',
-  },
-  code: {
-    icon: <Code className="w-3 h-3" />,
-    color: 'border-border text-muted-foreground',
-    hoverBorder: 'hover:border-primary/30',
-  },
-  tor: {
-    icon: <Shield className="w-3 h-3" />,
-    color: 'border-tor/20 text-tor/60',
-    hoverBorder: 'hover:border-tor/40',
-  },
-};
-
 export function UnifiedResultCard({ result, className }: UnifiedResultCardProps) {
-  // Tor results get the warning dialog flow.
-  if (result.source === 'tor') {
-    return <TorResultCard result={result} className={className} />;
-  }
-
   // Nostr profile results get a distinct layout.
   if (result.source === 'nostr' && result.kind === 'Profile') {
     return <NostrProfileCard result={result} className={className} />;
@@ -76,7 +29,7 @@ export function UnifiedResultCard({ result, className }: UnifiedResultCardProps)
     return <NostrCard result={result} className={className} />;
   }
 
-  // External results (web, wiki, news).
+  // External results (web index, community).
   return <ExternalResultCard result={result} className={className} />;
 }
 
@@ -94,7 +47,7 @@ function NostrProfileCard({ result, className }: { result: SearchResult; classNa
             <span className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
               {result.title}
             </span>
-            <Badge variant="outline" className="text-[10px] shrink-0 border-nostr/30 text-nostr">
+            <Badge variant="outline" className="text-[10px] shrink-0 border-primary/30 text-primary">
               Profile
             </Badge>
           </div>
@@ -112,14 +65,9 @@ function NostrProfileCard({ result, className }: { result: SearchResult; classNa
 
 /* ─── Nostr note / article / file ─── */
 function NostrCard({ result, className }: { result: SearchResult; className?: string }) {
-  const style = SOURCE_STYLE.nostr;
-
   return (
     <Link to={result.url} className={cn('block group', className)}>
-      <div className={cn(
-        'p-4 rounded-xl border border-border/50 bg-card hover:bg-card/80 transition-all duration-200',
-        style.hoverBorder,
-      )}>
+      <div className="p-4 rounded-xl border border-border/50 bg-card hover:border-primary/30 hover:bg-card/80 transition-all duration-200">
         {/* Header */}
         <div className="flex items-center gap-2 mb-2.5">
           {result.authorAvatar && (
@@ -135,7 +83,7 @@ function NostrCard({ result, className }: { result: SearchResult; className?: st
             <span className="text-xs text-muted-foreground/60">{timeAgo(result.timestamp)}</span>
           )}
           {result.kind && (
-            <Badge variant="outline" className={cn('text-[10px] ml-auto shrink-0', style.color)}>
+            <Badge variant="outline" className="text-[10px] ml-auto shrink-0 border-primary/30 text-primary">
               {result.kind === 'Article' && <FileText className="w-3 h-3 mr-0.5" />}
               {result.kind}
             </Badge>
@@ -167,10 +115,8 @@ function NostrCard({ result, className }: { result: SearchResult; className?: st
   );
 }
 
-/* ─── External result (web, wiki, news) ─── */
+/* ─── External result (web index, community) ─── */
 function ExternalResultCard({ result, className }: { result: SearchResult; className?: string }) {
-  const style = SOURCE_STYLE[result.source] ?? SOURCE_STYLE.web;
-
   return (
     <a
       href={result.url}
@@ -178,13 +124,12 @@ function ExternalResultCard({ result, className }: { result: SearchResult; class
       rel="noopener noreferrer"
       className={cn('block group', className)}
     >
-      <div className={cn(
-        'p-4 rounded-xl border border-border/50 bg-card hover:bg-card/80 transition-all duration-200',
-        style.hoverBorder,
-      )}>
+      <div className="p-4 rounded-xl border border-border/50 bg-card hover:border-primary/30 hover:bg-card/80 transition-all duration-200">
         {/* URL line */}
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="shrink-0 text-muted-foreground/60">{style.icon}</span>
+          <span className="shrink-0 text-muted-foreground/60">
+            {result.provider === 'community' ? <Zap className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
+          </span>
           <span className="text-xs text-muted-foreground font-mono truncate">
             {result.domain || result.engine || result.provider}
           </span>
@@ -192,12 +137,12 @@ function ExternalResultCard({ result, className }: { result: SearchResult; class
           {(result.kind || result.engine) && (
             <span className="flex items-center gap-1.5 ml-auto shrink-0">
               {result.kind && (
-                <Badge variant="outline" className={cn('text-[10px]', style.color)}>
+                <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">
                   {result.kind}
                 </Badge>
               )}
               {result.engine && (
-                <Badge variant="outline" className={cn('text-[10px]', style.color)}>
+                <Badge variant="outline" className="text-[10px] border-border text-muted-foreground">
                   {result.engine}
                 </Badge>
               )}
@@ -227,56 +172,6 @@ function ExternalResultCard({ result, className }: { result: SearchResult; class
         </div>
       </div>
     </a>
-  );
-}
-
-/* ─── Tor result with warning dialog ─── */
-function TorResultCard({ result, className }: { result: SearchResult; className?: string }) {
-  const [warningOpen, setWarningOpen] = useState(false);
-
-  return (
-    <>
-      <button
-        onClick={() => setWarningOpen(true)}
-        className={cn('block group w-full text-left', className)}
-      >
-        <div className="p-4 rounded-xl border border-tor/20 bg-card hover:border-tor/40 hover:bg-tor/5 transition-all duration-200">
-          {/* Header */}
-          <div className="flex items-center gap-2 mb-1.5">
-            <Shield className="w-3.5 h-3.5 shrink-0 text-tor/60" />
-            <span className="text-xs font-mono truncate text-tor/70">
-              {result.domain || result.url}
-            </span>
-            <AlertTriangle className="w-3 h-3 text-muted-foreground/40 shrink-0" />
-            <Badge variant="outline" className="text-[10px] ml-auto shrink-0 border-tor/20 text-tor/60">
-              Tor
-            </Badge>
-          </div>
-
-          {/* Title */}
-          <h3 className="font-semibold text-foreground group-hover:text-tor transition-colors mb-1 line-clamp-2 text-sm">
-            {result.title}
-          </h3>
-
-          {/* Description */}
-          {result.snippet && (
-            <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">{result.snippet}</p>
-          )}
-
-          <p className="text-[11px] text-muted-foreground/50 mt-2 flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
-            Requires Tor Browser — click to see warning
-          </p>
-        </div>
-      </button>
-
-      <OnionWarningDialog
-        open={warningOpen}
-        onOpenChange={setWarningOpen}
-        url={result.url}
-        type="tor"
-      />
-    </>
   );
 }
 

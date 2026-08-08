@@ -82,7 +82,7 @@ describe('buildIndexEvent', () => {
     tags: ['Nostr', 'privacy tools', 'nostr'],
     language: 'EN',
     published: 1754600000,
-    source: '0xsearchstr-web/1',
+    source: 'uncaged-engine/1',
   };
 
   it('builds a valid observation event', async () => {
@@ -203,10 +203,10 @@ describe('observationFromResult', () => {
   it('converts web results and skips nostr-internal ones', () => {
     const web = observationFromResult({
       id: 'x', title: 'Page', url: 'https://example.com/', snippet: 'S',
-      source: 'web', provider: 'searxng',
+      source: 'web', provider: 'example-provider',
     });
     expect(web).not.toBeNull();
-    expect(web!.source).toBe('0xsearchstr-web/1');
+    expect(web!.source).toBe('uncaged-engine/1');
 
     const internal = observationFromResult({
       id: 'x', title: 'Note', url: '/note1abc', snippet: 'S',

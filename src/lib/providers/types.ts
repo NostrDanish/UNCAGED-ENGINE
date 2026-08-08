@@ -1,38 +1,18 @@
 /**
- * Universal search provider interface.
+ * Universal search provider interface — the heart of the engine.
  *
- * Every provider — Nostr, SearXNG, Wikipedia, Hacker News, Tor, etc. —
- * implements the same `SearchProvider` interface and returns the same
- * `SearchResult[]`. The orchestrator merges, deduplicates, and ranks
- * results from all enabled providers.
+ * Every source of results (Nostr relays, the shared web index, the community
+ * index, or anything you add) implements the same `SearchProvider` interface
+ * and returns the same `SearchResult[]`. The orchestrator
+ * (`useProviderSearch`) runs all providers in parallel, then merges,
+ * deduplicates, and ranks their results.
+ *
+ * To add a provider: implement this interface and register it in
+ * `src/lib/providers/registry.ts`. See README.md → "Adding a provider".
  */
 
-/** The source network / category a result came from. */
-export type SearchSource =
-  | 'nostr'
-  | 'web'
-  | 'wiki'
-  | 'news'
-  | 'code'
-  | 'tor'
-  | 'i2p';
-
-/**
- * Privacy tier of a provider — who can see the user's query.
- *
- * - `nostr`:   Query goes over WebSocket to Nostr search relays. The relay
- *              operator sees the query text and your IP, but no account is
- *              linked (reads are unauthenticated). No third-party HTTP API,
- *              no CORS proxy.
- * - `direct`:  Query goes over HTTPS directly from the browser to a public
- *              API (Wikipedia, Hacker News, Stack Exchange). The API operator
- *              sees the query + IP. No proxy in between.
- * - `proxied`: Query is routed through a CORS proxy to reach the destination
- *              (SearXNG instances, DuckDuckGo HTML, Ahmia). The proxy sees the
- *              full request URL — including the query in plaintext — in
- *              addition to the destination service.
- */
-export type PrivacyTier = 'nostr' | 'direct' | 'proxied';
+/** The source category a result belongs to (drives tabs + badges). */
+export type SearchSource = 'nostr' | 'web';
 
 /** A universal search result from any provider. */
 export interface SearchResult {
@@ -40,13 +20,13 @@ export interface SearchResult {
   id: string;
   /** Display title. */
   title: string;
-  /** URL to link to (can be a /:nip19 internal route for Nostr). */
+  /** URL to link to (can be a /:nip19 internal route for Nostr events). */
   url: string;
   /** Short text snippet / description. */
   snippet: string;
   /** Source category for tab filtering and UI badges. */
   source: SearchSource;
-  /** Provider ID that produced this result (e.g. 'nostr', 'searxng', 'wikipedia'). */
+  /** Provider ID that produced this result (e.g. 'nostr', 'web-index'). */
   provider: string;
   /** Unix timestamp of the result content (if known). */
   timestamp?: number;
@@ -58,9 +38,9 @@ export interface SearchResult {
   domain?: string;
   /** Optional thumbnail / image URL. */
   thumbnail?: string;
-  /** Sub-type label (e.g. "Profile", "Article", "Note", ".onion"). */
+  /** Sub-type label (e.g. "Profile", "Article", "Note"). */
   kind?: string;
-  /** Search engine / source name for attribution (e.g. "DuckDuckGo", "Wikipedia"). */
+  /** Engine / source name for attribution (e.g. "Web Index", "Community"). */
   engine?: string;
   /** Extra tags for rendering (hashtags, badges, etc.). */
   tags?: string[];
@@ -88,24 +68,25 @@ export interface ProviderSearchResponse {
   suggestions?: string[];
 }
 
-/** A search provider that can be registered with the orchestrator. */
+/**
+ * A search provider that can be registered with the orchestrator.
+ *
+ * Every provider in this template talks to Nostr relays only — the user's
+ * query never leaves the Nostr network. If you add a provider that calls a
+ * clearnet API or a proxy, say so honestly in the UI (see README → Privacy).
+ */
 export interface SearchProvider {
-  /** Unique provider ID (e.g. 'nostr', 'searxng', 'wikipedia'). */
+  /** Unique provider ID (e.g. 'nostr', 'web-index'). */
   id: string;
-  /** Human-readable name. */
+  /** Human-readable name (shown in the live status indicators). */
   name: string;
   /** Source category this provider contributes to. */
   source: SearchSource;
   /**
-   * Extra source tabs this provider also runs under. E.g. the community
-   * provider is primarily 'web' but also runs under 'tor' so curated
-   * onion links appear in the Tor tab.
+   * Extra source tabs this provider also runs under. E.g. a community
+   * provider that is primarily 'web' could also run under another tab.
    */
   additionalSources?: SearchSource[];
-  /** Privacy tier — who can observe the query. Used by Privacy Mode. */
-  privacy: PrivacyTier;
-  /** Short, honest description of who sees the query (for the privacy popover). */
-  privacyNote: string;
   /** Execute the search. */
   search(options: SearchOptions): Promise<ProviderSearchResponse>;
 }

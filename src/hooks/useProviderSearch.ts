@@ -1,21 +1,21 @@
 /**
- * Unified search hook — runs all providers in parallel, streams results, and auto-indexes.
+ * Unified search hook — the orchestrator. Runs all registered providers in
+ * parallel, streams per-provider status, merges + deduplicates + ranks the
+ * results, and triggers auto-indexing.
  *
- * Each provider resolves independently so results appear incrementally:
- *   ✔ Nostr (124ms)
- *   ✔ Wikipedia (230ms)
- *   ⏳ SearXNG...
- *   ⏳ Hacker News...
+ * Each provider resolves independently so the UI can show live progress:
+ *   ✔ Web Index (90ms)   ✔ Nostr (240ms)   ⏳ Community...
  *
- * Returns per-provider status so the UI can show live progress indicators.
+ * Usage:
+ *   const { results, providers, isLoading, isEmpty, counts } =
+ *     useProviderSearch({ query, source: 'all' });
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { SearchResult, SearchSource, ProviderSearchResponse } from '@/lib/providers/types';
-import { getProvidersForPrivacy, getProvidersForSource } from '@/lib/providers/registry';
+import { getProvidersForSource } from '@/lib/providers/registry';
 import { useSearchIndexer } from '@/hooks/useSearchIndexer';
-import { useAppContext } from '@/hooks/useAppContext';
 
 export type ProviderStatus = 'idle' | 'searching' | 'done' | 'error';
 
@@ -45,22 +45,11 @@ export interface UseProviderSearchResult {
   isFetching: boolean;
   /** All providers finished but no results found. */
   isEmpty: boolean;
-  /** Search suggestions from web providers. */
+  /** Search suggestions from providers. */
   suggestions: string[];
   /** Count of results per source category. */
   counts: Record<SearchSource | 'all', number>;
-  /** Whether Privacy Mode is active (Nostr-tier providers only). */
-  privacyMode: boolean;
-  /** Providers blocked by Privacy Mode for the current source. */
-  suppressedProviders: { id: string; name: string }[];
 }
-
-/**
- * The minimum Nostr results before we skip web providers (Nostr-first strategy).
- * When searching "all", if Nostr returns this many results, web/wiki/news are
- * still queried but Nostr results are shown immediately.
- */
-const _NOSTR_ENOUGH = 8;
 
 export function useProviderSearch({
   query,
@@ -68,24 +57,11 @@ export function useProviderSearch({
   enabled = true,
 }: UseProviderSearchOptions): UseProviderSearchResult {
   const queryClient = useQueryClient();
-  const { config } = useAppContext();
-  const privacyMode = config.privacyMode;
-  const activeProviders = useMemo(
-    () => getProvidersForPrivacy(source, privacyMode),
-    [source, privacyMode],
-  );
-  /** Providers that exist for this source but are blocked by Privacy Mode. */
-  const suppressedProviders = useMemo(() => {
-    if (!privacyMode) return [];
-    const active = new Set(activeProviders.map((p) => p.id));
-    return getProvidersForSource(source).filter((p) => !active.has(p.id));
-  }, [source, privacyMode, activeProviders]);
+  const activeProviders = useMemo(() => getProvidersForSource(source), [source]);
   const { indexResults } = useSearchIndexer();
 
   // Provider states tracked outside React Query for per-provider granularity.
   const [providerStates, setProviderStates] = useState<Map<string, ProviderState>>(new Map());
-  const statesRef = useRef(providerStates);
-  statesRef.current = providerStates;
 
   const updateProviderState = useCallback((id: string, update: Partial<ProviderState>) => {
     setProviderStates((prev) => {
@@ -103,7 +79,7 @@ export function useProviderSearch({
     results: SearchResult[];
     suggestions: string[];
   }>({
-    queryKey: ['provider-search', query, source, privacyMode],
+    queryKey: ['provider-search', query, source],
     queryFn: async ({ signal }) => {
       if (!query.trim()) return { results: [], suggestions: [] };
 
@@ -141,8 +117,6 @@ export function useProviderSearch({
               latencyMs,
             });
 
-            // Invalidate to trigger re-render as each provider completes.
-            // This is safe because we accumulate in `results` array.
             return response;
           } catch {
             const latencyMs = Math.round(performance.now() - start);
@@ -202,7 +176,7 @@ export function useProviderSearch({
   const isLoading = providers.some((p) => p.status === 'searching');
   const isEmpty = query.trim().length > 0 && !isLoading && allResults.length === 0;
 
-  // Auto-index: publish results to the 0xSearchstr Nostr cache.
+  // Auto-index: publish useful web results to the shared Nostr index (SIP-01).
   const indexedQueryRef = useRef('');
   useEffect(() => {
     if (
@@ -242,8 +216,6 @@ export function useProviderSearch({
     isEmpty,
     suggestions,
     counts,
-    privacyMode,
-    suppressedProviders,
   };
 }
 

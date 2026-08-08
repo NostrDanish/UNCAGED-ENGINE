@@ -1,28 +1,25 @@
 /**
  * Community Index — user-submitted search results on Nostr.
  *
- * 0xSearchstr was built independently; the idea of letting EVERY user
- * curate the index (not just bots/crawlers) was adopted after discovering
- * Nostra Search (github.com/nostrasearch/nostrasearch.github.io, GPL-3.0),
- * a project exploring the same territory. Credit to them for the
- * community-curation idea — this is our own implementation with an
- * improved schema (unique per-URL d-tags; theirs reuse one d-tag per
- * author, so one author can only hold a single entry):
+ * The index isn't just a machine cache — it's community-curated. Any
+ * logged-in Nostr user can submit a link; submissions are signed by the
+ * user's own key and readable by every compatible client via the Community
+ * provider (`src/lib/providers/community.ts`).
  *
- *   0xSearchstr submissions (kind 30078):
- *     ["d", "0xsearchstr:submit:<url-hash>"]   ← unique per URL
- *     ["t", "0xsearchstr-submit"]
- *     ["t", "<user tag>"] ...
+ * Submission schema (kind 30078, NIP-78 application data):
+ *
+ *     ["d", "uncaged:submit:<url-hash>"]   ← unique per URL, per author
+ *     ["t", "uncaged-submit"]              ← marker tag (relay-filterable)
+ *     ["t", "<content type>"]              ← web | torrent | ipfs | video | ...
+ *     ["t", "<user tag>"] ...              ← up to 8 free-form topics
  *     ["title", "<title>"]
  *     ["url", "<url>"]
  *     ["type", "<content type>"]
- *     ["alt", "..."]
- *     content: description
+ *     ["alt", "..."]                       ← NIP-31 human description
+ *     content: description (free text)
  *
- * Interop: this module also READS Nostra Search index events
- * (d-tag "nostra:index"), including their NOSTRA_ENC_V1 AES-GCM payloads.
- * Their encryption key is a published constant — it exists to evade
- * relay-level content filtering, not to restrict read access.
+ * The deterministic d-tag means re-submitting the same URL replaces the
+ * user's earlier entry instead of duplicating it.
  */
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -32,14 +29,14 @@ import { detectContentType, contentTypeLabel, isValidSubmissionUrl, type Content
 /** Kind used for community submissions (NIP-78 application data). */
 export const COMMUNITY_KIND = 30078;
 
-/** t-tag marking 0xSearchstr community submissions. */
-export const COMMUNITY_T_TAG = '0xsearchstr-submit';
+/** t-tag marking community submissions. */
+export const COMMUNITY_T_TAG = 'uncaged-submit';
 
-/** Nostra Search index d-tag (for read interop). */
-export const NOSTRA_D_TAG = 'nostra:index';
+/** d-tag namespace prefix for submissions. */
+export const COMMUNITY_D_PREFIX = 'uncaged:submit:';
 
 /* ------------------------------------------------------------------ */
-/* Building (0xSearchstr submissions)                                  */
+/* Building                                                            */
 /* ------------------------------------------------------------------ */
 
 export interface SubmissionInput {
@@ -55,7 +52,7 @@ export async function submissionDTag(url: string): Promise<string> {
   const normalized = url.trim().toLowerCase();
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `0xsearchstr:submit:${hex.slice(0, 24)}`;
+  return `${COMMUNITY_D_PREFIX}${hex.slice(0, 24)}`;
 }
 
 /** Build tags + content for a community submission event (kind 30078). */
@@ -81,22 +78,17 @@ export async function buildSubmissionEvent(
       ['title', input.title.trim()],
       ['url', input.url.trim()],
       ['type', type],
-      ['alt', `0xSearchstr community index submission: ${input.title.trim()}`],
+      ['alt', `Community index submission: ${input.title.trim()}`],
     ],
   };
 }
 
 /* ------------------------------------------------------------------ */
-/* Parsing (shared helpers)                                            */
+/* Parsing                                                             */
 /* ------------------------------------------------------------------ */
 
 function getTag(event: NostrEvent, name: string): string | undefined {
   return event.tags.find(([n]) => n === name)?.[1];
-}
-
-/** Map a content type to the source tab it belongs to. */
-function sourceForType(type: ContentType): SearchResult['source'] {
-  return type === 'onion' ? 'tor' : 'web';
 }
 
 function extractDomain(url: string): string {
@@ -107,11 +99,7 @@ function extractDomain(url: string): string {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Parsing (0xSearchstr submissions)                                   */
-/* ------------------------------------------------------------------ */
-
-/** Parse a 0xSearchstr community submission into a SearchResult. */
+/** Parse a community submission event into a SearchResult. */
 export function parseSubmissionEvent(event: NostrEvent): SearchResult | null {
   if (event.kind !== COMMUNITY_KIND) return null;
   if (!event.tags.some(([n, v]) => n === 't' && v === COMMUNITY_T_TAG)) return null;
@@ -128,7 +116,7 @@ export function parseSubmissionEvent(event: NostrEvent): SearchResult | null {
     title: title.trim(),
     url: url.trim(),
     snippet: event.content.trim(),
-    source: sourceForType(type),
+    source: 'web',
     provider: 'community',
     timestamp: event.created_at,
     domain: extractDomain(url),
@@ -137,125 +125,7 @@ export function parseSubmissionEvent(event: NostrEvent): SearchResult | null {
     engine: 'Community',
     tags: event.tags.filter(([n]) => n === 't').map(([, v]) => v)
       .filter((v) => v !== COMMUNITY_T_TAG && v !== type).slice(0, 5),
-    score: 96, // Nostr-curated — just below organic Nostr results (100)
-    nostrEvent: event,
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* Nostra Search interop (read-only)                                   */
-/* ------------------------------------------------------------------ */
-
-/**
- * Their published obfuscation key — SHA-256 of this constant becomes the
- * AES-GCM key. Public by design: it defeats naive relay-level censorship
- * of index entries, it is not an access-control mechanism.
- */
-const NOSTRA_CIPHER_SECRET = 'NOSTRA_CENSORSHIP_RESISTANT_SEARCH_KEY_V1';
-
-let nostraKeyPromise: Promise<CryptoKey> | null = null;
-
-function getNostraKey(): Promise<CryptoKey> {
-  if (!nostraKeyPromise) {
-    nostraKeyPromise = crypto.subtle
-      .digest('SHA-256', new TextEncoder().encode(NOSTRA_CIPHER_SECRET))
-      .then((material) =>
-        crypto.subtle.importKey('raw', material, { name: 'AES-GCM' }, false, ['decrypt']),
-      );
-  }
-  return nostraKeyPromise;
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
-interface NostraPayload {
-  title?: string;
-  url?: string;
-  type?: ContentType;
-  description?: string;
-  tags?: string[];
-  lang?: string;
-}
-
-/** Decrypt a NOSTRA_ENC_V1 payload. Returns null on plaintext or failure. */
-async function decryptNostraPayload(content: string): Promise<NostraPayload | null> {
-  if (!content.startsWith('NOSTRA_ENC_V1:')) return null;
-
-  const parts = content.split(':');
-  if (parts.length < 3) return null;
-  const [, ivB64, cipherB64] = parts;
-
-  try {
-    if (ivB64 === 'RAW') {
-      // Their fallback when Web Crypto is unavailable: base64-encoded JSON.
-      const json = decodeURIComponent(escape(atob(cipherB64)));
-      return JSON.parse(json) as NostraPayload;
-    }
-
-    const key = await getNostraKey();
-    const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: base64ToBytes(ivB64) as BufferSource },
-      key,
-      base64ToBytes(cipherB64) as BufferSource,
-    );
-    return JSON.parse(new TextDecoder().decode(plain)) as NostraPayload;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Parse a Nostra Search index event (d-tag "nostra:index") into a
- * SearchResult. Handles both plaintext (title/url tags) and
- * NOSTRA_ENC_V1 encrypted payloads. Async because of Web Crypto.
- */
-export async function parseNostraEvent(event: NostrEvent): Promise<SearchResult | null> {
-  if (event.kind !== COMMUNITY_KIND) return null;
-  if (getTag(event, 'd') !== NOSTRA_D_TAG) return null;
-
-  let title: string | undefined;
-  let url: string | undefined;
-  let type: ContentType | undefined;
-  let description = '';
-  let tags: string[] = [];
-
-  if (event.content.startsWith('NOSTRA_ENC_V1:')) {
-    const payload = await decryptNostraPayload(event.content);
-    if (!payload) return null;
-    title = payload.title;
-    url = payload.url;
-    type = payload.type;
-    description = payload.description ?? '';
-    tags = Array.isArray(payload.tags) ? payload.tags : [];
-  } else {
-    title = getTag(event, 'title') ?? getTag(event, 'subject');
-    url = getTag(event, 'url') ?? getTag(event, 'magnet') ?? getTag(event, 'r');
-    description = event.content;
-    tags = event.tags.filter(([n]) => n === 't').map(([, v]) => v);
-  }
-
-  if (!title?.trim() || !url || !isValidSubmissionUrl(url)) return null;
-
-  const resolvedType = type ?? detectContentType(url);
-
-  return {
-    id: event.id,
-    title: title.trim(),
-    url: url.trim(),
-    snippet: description.trim(),
-    source: sourceForType(resolvedType),
-    provider: 'nostra-index',
-    timestamp: event.created_at,
-    domain: extractDomain(url),
-    kind: resolvedType === 'web' || resolvedType === 'other' ? undefined : contentTypeLabel(resolvedType),
-    engine: 'Nostra Index',
-    tags: tags.filter((t) => t !== 'nostra-encrypted').slice(0, 5),
-    score: 92,
+    score: 96, // Human-curated — just below organic Nostr results (100).
     nostrEvent: event,
   };
 }

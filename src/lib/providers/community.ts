@@ -1,28 +1,22 @@
 /**
  * Community Index provider — user-curated search results from Nostr.
  *
- * Reads two event families from search relays:
- *   1. 0xSearchstr submissions (t-tag "0xsearchstr-submit")
- *   2. Nostra Search index entries (d-tag "nostra:index", incl. encrypted)
+ * Any logged-in Nostr user can submit a link (Submit button in the header).
+ * Submissions are kind 30078 addressable events signed by the user's own key
+ * (schema in src/lib/communityIndex.ts, documented in NIP.md).
  *
  * Relays can't full-text search arbitrary tags, so recent submissions are
- * fetched and filtered client-side against the query terms (AND match
- * across title, description, tags, and URL).
+ * fetched by `#t` tag and filtered client-side against the query terms
+ * (AND match across title, description, tags, and URL).
  */
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { getSearchRelayUrls } from '@/lib/appRelays';
 import { getSearchRelay } from '@/lib/searchRelays';
-import {
-  COMMUNITY_KIND,
-  COMMUNITY_T_TAG,
-  NOSTRA_D_TAG,
-  parseSubmissionEvent,
-  parseNostraEvent,
-} from '@/lib/communityIndex';
+import { COMMUNITY_KIND, COMMUNITY_T_TAG, parseSubmissionEvent } from '@/lib/communityIndex';
 import type { SearchProvider, SearchOptions, ProviderSearchResponse, SearchResult } from './types';
 
-/** How many recent events to pull per family before client-side filtering. */
+/** How many recent events to pull before client-side filtering. */
 const FETCH_LIMIT = 150;
 
 /** Does this result match the query? AND-match across searchable fields. */
@@ -41,16 +35,12 @@ export const communityProvider: SearchProvider = {
   id: 'community',
   name: 'Community',
   source: 'web',
-  additionalSources: ['tor'], // curated onion links belong in the Tor tab too
-  privacy: 'nostr',
-  privacyNote: 'User-curated index entries read from Nostr relays. Relay operators see the query, but no account is linked.',
 
   async search({ query, signal }: SearchOptions): Promise<ProviderSearchResponse> {
     if (!query.trim()) return { results: [] };
 
     const filters: NostrFilter[] = [
       { kinds: [COMMUNITY_KIND], '#t': [COMMUNITY_T_TAG], limit: FETCH_LIMIT },
-      { kinds: [COMMUNITY_KIND], '#d': [NOSTRA_D_TAG], limit: FETCH_LIMIT },
     ];
 
     const settled = await Promise.allSettled(
@@ -71,19 +61,12 @@ export const communityProvider: SearchProvider = {
       }
     }
 
-    // Parse: 0xSearchstr submissions are sync; Nostra payloads may need decryption.
-    const parsed = await Promise.all(
-      [...events.values()].map(async (ev) => {
-        const isNostra = ev.tags.some(([n, v]) => n === 'd' && v === NOSTRA_D_TAG);
-        return isNostra ? parseNostraEvent(ev) : parseSubmissionEvent(ev);
-      }),
-    );
-
     const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
 
-    // Dedupe by URL (keep newest), filter by query, sort by recency.
+    // Parse, dedupe by URL (keep newest), filter by query, sort by recency.
     const byUrl = new Map<string, SearchResult>();
-    for (const result of parsed) {
+    for (const ev of events.values()) {
+      const result = parseSubmissionEvent(ev);
       if (!result || !matchesQuery(result, terms)) continue;
       const key = result.url.toLowerCase();
       const existing = byUrl.get(key);

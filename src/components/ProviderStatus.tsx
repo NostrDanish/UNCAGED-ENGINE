@@ -3,7 +3,7 @@
  * which are still searching, and latency for each.
  *
  * ```
- * ✔ Nostr (124ms)  ✔ Wikipedia (230ms)  ⏳ SearXNG...  ⏳ HN...
+ * ✔ Web Index (90ms)  ✔ Nostr (240ms)  ⏳ Community...
  * ```
  */
 import { Check, X, Loader2, Minus } from 'lucide-react';
@@ -22,13 +22,8 @@ interface ProviderStatusProps {
 }
 
 const SOURCE_COLORS: Record<string, string> = {
-  nostr: 'text-nostr',
-  web: 'text-clearnet',
-  wiki: 'text-foreground/70',
-  news: 'text-foreground/70',
-  code: 'text-foreground/70',
-  tor: 'text-tor',
-  i2p: 'text-i2p',
+  nostr: 'text-primary',
+  web: 'text-foreground/70',
 };
 
 export function ProviderStatus({ providers, hasResults = false, className }: ProviderStatusProps) {
