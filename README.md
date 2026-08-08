@@ -172,7 +172,18 @@ that API operator sees the query too — say so in your UI. Keep it honest.
 
 ### 2. How auto-indexing works (SIP-01)
 
-Every search grows the shared index — without ever leaking the query.
+Every search grows the shared index — without ever leaking the query. The
+index has two feeders, both going through `publishIndexObservation()`
+(`src/lib/indexPublisher.ts`):
+
+**A. Community submissions.** When a user submits an http(s) link, the app
+publishes two events: their signed kind 30078 submission (attribution) AND a
+kind 39697 observation signed by the device indexer identity (shared document
+index). The index grows from the first submission — no external provider
+needed.
+
+**B. Search-driven indexing.** After every search, `useSearchIndexer`
+contributes fresh web pages the providers surfaced:
 
 ```
 search results arrive
@@ -188,8 +199,13 @@ for each remaining URL (max 10 per search):
   normalize URL  →  d = "widx:" + sha256(url)[0:32]
   build kind 39697 event { title, description, image, topics }
   sign with the DEVICE indexer keypair (never the user's key)
-  publish to the search relay pool
+  publish to the index relay set
 ```
+
+Search-driven indexing is quiet out of the box (all built-in web results
+come FROM the index — re-indexing them would be an echo loop) and switches on
+automatically when you add a provider that discovers fresh web pages
+(see "Adding a provider").
 
 - **The query is never published.** The event contains a URL and its public
   metadata — nothing about who searched for what.
@@ -231,6 +247,11 @@ user's earlier entry. The Community provider fetches recent `#t:
 uncaged-submit` events and matches them client-side (relays can't full-text
 search tags). Submissions are signed by the user's own key — curation is
 attributable, and spam can be filtered by author later.
+
+http(s) submissions are additionally published as **SIP-01 web index
+observations** (kind 39697) signed by the device's anonymous indexer
+identity — so every submission grows the shared document index too
+(`src/components/SubmitToIndex.tsx` → `publishIndexObservation()`).
 
 `http(s)://`, `magnet:`, `ipfs://`, and `.onion` links are accepted;
 `javascript:`/`data:` and friends are rejected at parse and build time
@@ -307,6 +328,7 @@ src/
 │   │   ├── web-index.ts      ← SIP-01 kind 39697 index reader
 │   │   └── community.ts      ← kind 30078 curated links
 │   ├── webIndex.ts           ← SIP-01: URL normalization, build/parse/validate
+│   ├── indexPublisher.ts     ← signs + publishes kind 39697 observations
 │   ├── indexerIdentity.ts    ← per-device anonymous indexer keypair
 │   ├── communityIndex.ts     ← submission schema (build + parse)
 │   ├── contentType.ts        ← link type detection + URL allowlist

@@ -5,6 +5,11 @@
  * Submissions are kind 30078 events signed by the user's own key,
  * readable by every compatible client via the Community provider
  * (schema: src/lib/communityIndex.ts, documented in NIP.md).
+ *
+ * http(s) submissions are ALSO published as SIP-01 web index observations
+ * (kind 39697), signed by this device's anonymous indexer identity — so
+ * every submission grows the shared document index too, without linking
+ * the observation to the user's personal key.
  */
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,6 +30,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { buildSubmissionEvent } from '@/lib/communityIndex';
+import { publishIndexObservation } from '@/lib/indexPublisher';
 import { detectContentType, contentTypeLabel, isValidSubmissionUrl, type ContentType } from '@/lib/contentType';
 import { cn } from '@/lib/utils';
 
@@ -92,8 +98,21 @@ export function SubmitToIndex({ open, onOpenChange }: SubmitToIndexProps) {
       const template = await buildSubmissionEvent({ url, title, description, tags, type });
       createEvent(template, {
         onSuccess: () => {
+          // Dual-publish: http(s) links also become SIP-01 web index
+          // observations (kind 39697), signed by this device's anonymous
+          // indexer identity — the shared document index grows with every
+          // submission, without linking it to the user's personal key.
+          // Fire-and-forget: indexing is best-effort, never blocks the UX.
+          void publishIndexObservation({
+            url,
+            title,
+            description,
+            tags,
+            source: 'uncaged-engine-submit/1',
+          });
+
           toast({
-            title: 'Added to the community index',
+            title: 'Added to the index',
             description: 'Your submission is now searchable by everyone.',
           });
           // Let future searches pick up the new entry immediately.
@@ -118,7 +137,8 @@ export function SubmitToIndex({ open, onOpenChange }: SubmitToIndexProps) {
           </DialogTitle>
           <DialogDescription>
             Curate the decentralized index. Your submission is signed with your Nostr key
-            and becomes searchable by everyone — no middleman.
+            and becomes searchable by everyone — no middleman. Web links are also added to
+            the shared document index under this device's anonymous indexing identity.
           </DialogDescription>
         </DialogHeader>
 

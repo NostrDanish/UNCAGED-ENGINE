@@ -20,9 +20,12 @@ The shared, decentralized document index. One addressable event per
 `(indexer pubkey, normalized URL)` — an indexer's signed statement: *"I
 observed this web page at this time, and here is its public metadata."*
 
-- **Written by** the auto-indexer (`src/hooks/useSearchIndexer.ts`) using the
+- **Written by** the index publisher (`src/lib/indexPublisher.ts`) using the
   per-device indexer identity (`src/lib/indexerIdentity.ts`) — **never** the
-  user's personal key, and **never** containing the search query.
+  user's personal key, and **never** containing the search query. Called by
+  the auto-indexer (`src/hooks/useSearchIndexer.ts`) for fresh web results,
+  and by the Submit dialog (`src/components/SubmitToIndex.tsx`) for http(s)
+  community submissions.
 - **Read by** the Web Index provider (`src/lib/providers/web-index.ts`),
   which groups observations by `d` tag and ranks by independent indexer
   count + recency.
@@ -77,6 +80,9 @@ key**, so curation is attributable and spam is author-filterable.
 - **Read by** the Community provider (`src/lib/providers/community.ts`):
   fetches recent `#t: uncaged-submit` events and AND-matches the query
   client-side across title, description, URL, and tags.
+- **Dual-published:** http(s) submissions also become SIP-01 observations
+  (kind 39697, §1) signed by the device indexer identity — one submission
+  feeds both the curated index and the shared document index.
 
 ```json
 {

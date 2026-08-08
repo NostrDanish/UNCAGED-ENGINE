@@ -18,29 +18,18 @@
  * Indexer keys are pseudonymous and replaceable; network observers may still
  * correlate IP/timing (key separation, not network anonymity — spec §14).
  *
- * Out of the box this template's only web results come FROM the index, so
- * auto-indexing stays quiet until you add a provider that discovers fresh
- * web pages (see README → "Adding a provider"). The machinery is complete
- * and ready: any new provider's http(s) results are indexed automatically.
+ * Out of the box, the index grows through community submissions (the Submit
+ * dialog dual-publishes them as SIP-01 observations — see
+ * src/components/SubmitToIndex.tsx). Search-driven auto-indexing switches on
+ * the moment you add a provider that discovers fresh web pages (see
+ * README → "Adding a provider"): any new provider's http(s) results are
+ * indexed automatically.
  */
 import { useCallback, useRef } from 'react';
-import { finalizeEvent } from 'nostr-tools/pure';
-
-/* Local hex helpers — avoid bundler ambiguity around @noble/hashes subpath
- * resolution (the identity module does the same). */
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return bytes;
-}
-
-import type { NostrEvent } from '@nostrify/nostrify';
 
 import type { SearchResult } from '@/lib/providers/types';
-import { getIndexerIdentity } from '@/lib/indexerIdentity';
-import { buildIndexEvent, normalizeIndexUrl, observationFromResult } from '@/lib/webIndex';
-import { getSearchRelayUrls } from '@/lib/appRelays';
-import { getSearchRelay } from '@/lib/searchRelays';
+import { normalizeIndexUrl, observationFromResult } from '@/lib/webIndex';
+import { publishIndexObservation } from '@/lib/indexPublisher';
 import { useAppContext } from '@/hooks/useAppContext';
 
 /** Max document observations published per search. */
@@ -48,13 +37,6 @@ const MAX_OBSERVATIONS_PER_SEARCH = 10;
 
 /** Providers whose results are already on Nostr — never re-indexed. */
 const NOSTR_NATIVE_PROVIDERS = new Set(['nostr', 'web-index', 'community']);
-
-/** Publish a signed event to every search relay (best-effort). */
-async function publishObservation(signedEvent: NostrEvent) {
-  await Promise.allSettled(
-    getSearchRelayUrls().map((url) => getSearchRelay(url).event(signedEvent)),
-  );
-}
 
 /**
  * Hook: auto-indexes search results to Nostr.
@@ -91,25 +73,9 @@ export function useSearchIndexer() {
       if (normalized) indexedDocsRef.current.add(normalized);
     }
 
-    const identity = getIndexerIdentity();
-    const secretKey = hexToBytes(identity.secretHex);
-    const pubkeyHex = identity.pubkeyHex;
-
     for (const input of observations) {
       try {
-        const template = await buildIndexEvent(input);
-        if (!template) continue;
-        const signedEvent = finalizeEvent(
-          {
-            kind: template.kind,
-            created_at: Math.floor(Date.now() / 1000),
-            tags: template.tags,
-            content: template.content,
-            pubkey: pubkeyHex,
-          },
-          secretKey,
-        );
-        await publishObservation(signedEvent);
+        await publishIndexObservation(input);
       } catch {
         // Indexing failure is non-fatal — unmark so a later search can retry.
         const normalized = normalizeIndexUrl(input.url);

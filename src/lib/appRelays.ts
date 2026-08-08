@@ -109,3 +109,36 @@ export function getSearchRelayUrls(): string[] {
   }
   return pool;
 }
+
+/* ------------------------------------------------------------------ */
+/* Index publishing                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Extra relays that index observations (SIP-01, kind 39697) are published
+ * to, beyond the search pool. These are well-known public relays that
+ * reliably accept writes, so observations propagate widely (search relays
+ * pick them up from here over time).
+ */
+export const INDEX_WRITE_RELAYS = [
+  'wss://relay.ditto.pub/',
+  'wss://relay.primal.net/',
+  'wss://relay.damus.io/',
+];
+
+/**
+ * Relays that index observations are published to: the search pool first
+ * (so the Web Index provider sees fresh observations immediately), then the
+ * write relays (so they replicate across the network). Deduped.
+ */
+export function getIndexPublishRelays(): string[] {
+  const seen = new Set<string>();
+  const pool: string[] = [];
+  for (const url of [...getSearchRelayUrls(), ...INDEX_WRITE_RELAYS]) {
+    if (!seen.has(url)) {
+      seen.add(url);
+      pool.push(url);
+    }
+  }
+  return pool;
+}

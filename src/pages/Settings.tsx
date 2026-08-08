@@ -135,9 +135,10 @@ function IndexingSection() {
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              When enabled, useful web pages discovered during your searches are anonymously
-              contributed to the shared Nostr index — one small event per URL, containing
-              only the page's public title and description. <strong className="text-foreground">Your
+              When enabled, useful web pages discovered during your searches — and web links
+              submitted to the community index — are anonymously contributed to the shared
+              Nostr index: one small event per URL, containing only the page's public title
+              and description. <strong className="text-foreground">Your
               search queries are never published</strong>, and your personal Nostr identity
               is never used.
             </p>
