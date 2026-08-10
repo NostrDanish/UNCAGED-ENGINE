@@ -22,8 +22,10 @@ to Nostr relays over WebSocket.
   profiles (kind 0), notes (kind 1), files (kind 1063), articles (kind 30023),
   wiki pages (kind 30818).
 - **Shared web index (SIP-01, kind 39697)** — a decentralized document index
-  on Nostr. Reads observations from every indexer; auto-indexes newly
-  discovered pages with a per-device anonymous keypair.
+  on Nostr. Reads observations from every indexer (NIP-50-accelerated on
+  SIP-01-aware relays, with hash verification per spec §18); auto-indexes
+  newly discovered pages with a per-device anonymous keypair. Implements the
+  canonical spec at [github.com/NostrDanish/SIP-01](https://github.com/NostrDanish/SIP-01).
 - **Community index (kind 30078)** — any logged-in Nostr user can submit
   links. Signed, attributable, relay-filterable.
 - **Complete search UI/UX** — hero search page, live per-provider status,
@@ -216,9 +218,21 @@ automatically when you add a provider that discovers fresh web pages
   produce events with the same `d` tag — search nodes group by `d` and count
   distinct authors ("N independent indexers saw this page").
 
+**Spec conformance (v1.1):** `src/lib/webIndex.ts` is the reference
+implementation — byte-compatible URL normalization (spec §7) and content
+hashing (§8), proven by the §13 test vectors in `webIndex.test.ts`. The
+registered extension tags (§9.2 — `type`, `platform`, `category`, `network`,
+`country`, `mime`) are supported on build and parse; the Web Index provider
+uses NIP-50 acceleration with web operators (`site:`, `lang:`, …) on
+SIP-01-aware relays (§15) and verifies `d`/`x` hashes before display (§18).
+Ecosystem docs, the tag registry, and the live explorer live at
+[github.com/NostrDanish/SIP-01](https://github.com/NostrDanish/SIP-01).
+
 The full wire format is specified in
-**[docs/SEARCH_INDEX_PROTOCOL.md](docs/SEARCH_INDEX_PROTOCOL.md)** and
-implemented in `src/lib/webIndex.ts` (with tests in `webIndex.test.ts`).
+**[docs/SIP-01.md](docs/SIP-01.md)** (mirrored from the canonical
+[SIP-01 repo](https://github.com/NostrDanish/SIP-01)) and implemented in
+`src/lib/webIndex.ts`, covered by the spec's §13 test vectors in
+`webIndex.test.ts`.
 
 ### 3. The community index (kind 30078)
 
@@ -301,7 +315,7 @@ defaults, `SEARCH_RELAYS` for the search pool).
 | Kind / NIP | Purpose |
 |---|---|
 | **NIP-50** | `search` filter keyword against search-capable relays |
-| **39697** | SIP-01 web index observations (addressable, per-device indexer keys) — [spec](docs/SEARCH_INDEX_PROTOCOL.md) |
+| **39697** | SIP-01 web index observations (addressable, per-device indexer keys) — [spec](docs/SIP-01.md) |
 | **30078** | Community link submissions (NIP-78 application data) |
 | **0** | Profile metadata (search results + author cards) |
 | **1** | Notes (search results) |

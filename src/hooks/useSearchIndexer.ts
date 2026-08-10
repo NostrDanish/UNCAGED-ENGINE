@@ -1,7 +1,7 @@
 /**
  * Auto-indexing hook — contributes useful web results discovered during
  * searches to the shared Nostr web index (Search Index Protocol, SIP-01 —
- * see docs/SEARCH_INDEX_PROTOCOL.md and src/lib/webIndex.ts).
+ * see docs/SIP-01.md and src/lib/webIndex.ts).
  *
  * What it publishes: one kind 39697 addressable event per unique URL,
  * containing only the page's public metadata (title, description, tags).
@@ -16,7 +16,7 @@
  *
  * Every browser is an independent indexer — there is no central signing key.
  * Indexer keys are pseudonymous and replaceable; network observers may still
- * correlate IP/timing (key separation, not network anonymity — spec §14).
+ * correlate IP/timing (key separation, not network anonymity — spec §16).
  *
  * Out of the box, the index grows through community submissions (the Submit
  * dialog dual-publishes them as SIP-01 observations — see

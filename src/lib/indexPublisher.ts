@@ -1,6 +1,6 @@
 /**
  * Index publisher — signs and publishes SIP-01 web index observations
- * (kind 39697, see docs/SEARCH_INDEX_PROTOCOL.md).
+ * (kind 39697, see docs/SIP-01.md).
  *
  * Every observation is signed by THIS DEVICE's dedicated indexer identity
  * (src/lib/indexerIdentity.ts) — never the user's personal Nostr key, and

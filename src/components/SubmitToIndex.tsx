@@ -49,6 +49,18 @@ const TYPE_OPTIONS: { type: ContentType; icon: React.ReactNode }[] = [
   { type: 'onion', icon: <ShieldAlert className="w-3.5 h-3.5" /> },
 ];
 
+/**
+ * Map submission content types onto SIP-01's registered `type` extension
+ * vocabulary (spec §9.2). Non-web protocols never reach the SIP-01 publisher
+ * (it accepts http(s) only), so they need no mapping.
+ */
+const SIP01_TYPE: Partial<Record<ContentType, string>> = {
+  web: 'page',
+  video: 'video',
+  audio: 'audio',
+  pdf: 'file',
+};
+
 export function SubmitToIndex({ open, onOpenChange }: SubmitToIndexProps) {
   const { user } = useCurrentUser();
   const { mutate: createEvent, isPending } = useNostrPublish();
@@ -108,6 +120,8 @@ export function SubmitToIndex({ open, onOpenChange }: SubmitToIndexProps) {
             title,
             description,
             tags,
+            type: SIP01_TYPE[type],
+            network: type === 'onion' ? 'tor' : undefined,
             source: 'uncaged-engine-submit/1',
           });
 

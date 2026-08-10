@@ -6,7 +6,7 @@ schemas of its own:
 
 | Schema | Kind | Type | Defined in |
 |--------|------|------|------------|
-| Web Index Observation (SIP-01) | **39697** | addressable | [docs/SEARCH_INDEX_PROTOCOL.md](docs/SEARCH_INDEX_PROTOCOL.md) |
+| Web Index Observation (SIP-01) | **39697** | addressable | [docs/SIP-01.md](docs/SIP-01.md) |
 | Community Submission | **30078** | addressable (NIP-78) | this file, §2 |
 
 All published events carry a NIP-31 `alt` tag with a human-readable
@@ -53,18 +53,29 @@ observed this web page at this time, and here is its public metadata."*
 | Tag | Required | Meaning |
 |-----|----------|---------|
 | `d` | ✔ | `"widx:" + sha256(normalized_url)[0:32]` — URL identity; identical across all indexers |
-| `u` | ✔ | Canonical URL (http/https only, allowlisted) |
+| `u` | ✔ | Canonical URL (http/https only, ≤ 2048 chars, allowlisted) |
 | `v` | ✔ | Schema version, currently `"1"` |
-| `t` | – | 0–8 lowercase topic tags (relay-filterable) |
-| `l` | – | ISO 639-1 language code |
-| `x` | – | Content hash (agreement/freshness signal) |
+| `t` | – | 0–8 topic tags matching `^[a-z0-9][a-z0-9-]{0,99}$` (relay-filterable) |
+| `l` | – | ISO 639-1 language code (two-letter shape enforced) |
+| `x` | – | Content hash `sha256(title + "\n" + description)` (agreement/freshness signal) |
 | `published` | – | Page's claimed publication time (unix seconds) |
-| `source` | – | Indexer software id (informational; the pubkey is the identity) |
-| `alt` | ✔ | NIP-31 description |
+| `source` | – | Indexer software id, ≤ 100 chars (informational; the pubkey is the identity) |
+| `alt` | ✔ | `alt`-convention description ("Web index observation: …") |
+| `type` | – | §9.2 extension — document type: `page`, `article`, `repository`, `video`, … (emitted by community submissions) |
+| `platform` | – | §9.2 extension — source platform: `github`, `youtube`, … |
+| `category` | – | §9.2 extension — engine-defined content category |
+| `network` | – | §9.2 extension — `clearnet`, `tor`, `i2p`, … (emitted for `.onion` submissions) |
+| `country` | – | §9.2 extension — ISO 3166-1 alpha-2, uppercase |
+| `mime` | – | §9.2 extension — document media type |
+
+Extensions are optional and ignored by consumers that don't know them
+(spec §9.1) — the engine parses them into `observation.extensions` and the
+Web Index provider surfaces `type` as the result badge.
 
 The **full protocol specification** — normalization rules, field caps,
-security requirements, relay guidance, search-node behavior — lives in
-**[docs/SEARCH_INDEX_PROTOCOL.md](docs/SEARCH_INDEX_PROTOCOL.md)**. It is
+test vectors (§13), relay operators (§15), search-node behavior (§18) —
+lives in **[docs/SIP-01.md](docs/SIP-01.md)**, mirrored from the canonical
+[SIP-01 repository](https://github.com/NostrDanish/SIP-01). It is
 deliberately app-independent: any client, crawler, or relay can implement
 SIP-01 and read the same shared index.
 
@@ -158,8 +169,9 @@ by `src/pages/NIP19Page.tsx`.
 
 - **Index observations (39697):** trusted *structurally* — any indexer pubkey
   is accepted; events are self-signed statements about public metadata and
-  are validated on parse (schema version, URL allowlist, field caps).
-  Agreement across independent indexers is the ranking signal.
+  are validated on parse (schema version, URL allowlist, field caps) and
+  integrity-checked before display (`d` ↔ normalized `u`, `x` ↔ content —
+  spec §18). Agreement across independent indexers is the ranking signal.
 - **Community submissions (30078):** trusted *socially* — attributable to
   their author. Clients may later filter by author (follow graph, allowlists)
   without a schema change.
