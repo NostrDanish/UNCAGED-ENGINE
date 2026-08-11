@@ -23,9 +23,10 @@ observed this web page at this time, and here is its public metadata."*
 - **Written by** the index publisher (`src/lib/indexPublisher.ts`) using the
   per-device indexer identity (`src/lib/indexerIdentity.ts`) — **never** the
   user's personal key, and **never** containing the search query. Called by
-  the auto-indexer (`src/hooks/useSearchIndexer.ts`) for fresh web results,
-  and by the Submit dialog (`src/components/SubmitToIndex.tsx`) for http(s)
-  community submissions.
+  the auto-indexer (`src/hooks/useSearchIndexer.ts`) for web pages discovered
+  during search (file-metadata URLs, links cited by Nostr content, and any
+  external-provider results), and by the Submit dialog
+  (`src/components/SubmitToIndex.tsx`) for http(s) community submissions.
 - **Read by** the Web Index provider (`src/lib/providers/web-index.ts`),
   which groups observations by `d` tag and ranks by independent indexer
   count + recency.

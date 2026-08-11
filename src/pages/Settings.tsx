@@ -6,7 +6,7 @@
  *   - Your Relays:   NIP-65 relay list (publishes kind 10002 when logged in)
  *   - Search Relays: the NIP-50 relay pool used for search, with latency test
  */
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useSeoMeta } from '@unhead/react';
 import {
   Settings as SettingsIcon, Sun, Moon, Monitor,
@@ -34,6 +34,7 @@ import { useSearchRelayPool } from '@/hooks/useSearchRelayPool';
 import {
   getIndexerIdentity, regenerateIndexerIdentity, exportIndexerNsec,
 } from '@/lib/indexerIdentity';
+import { getSessionPublishedCount, subscribeSessionStats } from '@/lib/indexPublisher';
 import type { Theme } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 
@@ -95,6 +96,9 @@ function IndexingSection() {
   // Read the device identity once per mount; regenerate bumps this state.
   const [identity, setIdentity] = useState(() => getIndexerIdentity());
 
+  // Live session counter — proof the indexer is working.
+  const publishedCount = useSyncExternalStore(subscribeSessionStats, getSessionPublishedCount);
+
   const copy = async (value: string, what: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -135,12 +139,19 @@ function IndexingSection() {
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              When enabled, useful web pages discovered during your searches — and web links
-              submitted to the community index — are anonymously contributed to the shared
-              Nostr index: one small event per URL, containing only the page's public title
-              and description. <strong className="text-foreground">Your
+              When enabled, web pages discovered during your searches (files and links
+              referenced by Nostr content, plus results from any external providers) and
+              web links submitted to the community index are anonymously contributed to
+              the shared Nostr index — one small event per URL, containing only the page's
+              public title and description. <strong className="text-foreground">Your
               search queries are never published</strong>, and your personal Nostr identity
               is never used.
+            </p>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
+              <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', publishedCount > 0 ? 'bg-green-500' : 'bg-muted-foreground/30')} />
+              {publishedCount > 0
+                ? `${publishedCount} observation${publishedCount !== 1 ? 's' : ''} published this session`
+                : 'No observations published yet this session — they appear here as you search.'}
             </p>
           </div>
         </CardContent>

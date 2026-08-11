@@ -185,16 +185,27 @@ index). The index grows from the first submission — no external provider
 needed.
 
 **B. Search-driven indexing.** After every search, `useSearchIndexer`
-contributes fresh web pages the providers surfaced:
+contributes the web pages the search surfaced. In a Nostr-native engine,
+"discovered web pages" are the ones Nostr content *references*:
+
+- **File metadata (kind 1063)** — the `url` tag is a real web resource with
+  an author-provided title/description → rich observation.
+- **Links cited in notes/articles** — a web link referenced by content that
+  matched your query is a genuine discovery signal → discovery-layer
+  observation (host as title, no description — the citing text is commentary,
+  never page metadata; crawlers enrich these later).
+- **Any external provider you add** (see "Adding a provider") — its http(s)
+  results are indexed automatically.
 
 ```
 search results arrive
        │
        ▼
 useSearchIndexer filters:
-  ✗ skip Nostr-native results (already on relays)
-  ✗ skip results that came FROM the index (no echo loop)
-  ✗ skip non-http(s) URLs
+  ✗ skip results that came FROM the index (web-index/community — no echo loop)
+  ✗ skip Nostr content itself (already on relays)
+  ✓ keep Nostr results that REFERENCE a web page (webUrl)
+  ✓ keep http(s) results from external providers
        │
        ▼
 for each remaining URL (max 10 per search):
@@ -204,10 +215,8 @@ for each remaining URL (max 10 per search):
   publish to the index relay set
 ```
 
-Search-driven indexing is quiet out of the box (all built-in web results
-come FROM the index — re-indexing them would be an echo loop) and switches on
-automatically when you add a provider that discovers fresh web pages
-(see "Adding a provider").
+Settings → Indexing shows a live count of observations published this
+session, so you can watch the index grow as you search.
 
 - **The query is never published.** The event contains a URL and its public
   metadata — nothing about who searched for what.
@@ -234,7 +243,25 @@ The full wire format is specified in
 `src/lib/webIndex.ts`, covered by the spec's §13 test vectors in
 `webIndex.test.ts`.
 
-### 3. The community index (kind 30078)
+### 3. Bootstrapping the index (seed data)
+
+A fresh index is empty — crawlers alone take months to find the web. The
+`seed` script converts existing web-metadata corpora (reference source:
+[OfflineWebSearch](https://github.com/rumca-js/OfflineWebSearch)'s curated
+SQLite datasets) into SIP-01 observations, byte-compatibly:
+
+```bash
+curl -LO https://rumca-js.github.io/data/top.db.zip && unzip top.db.zip
+npm run seed -- top.db                      # → seed-top.jsonl (dry run)
+npm run seed -- top.db --publish --nsec nsec1…   # sign + publish to relays
+```
+
+Seeded documents arrive as ordinary kind 39697 events — the Web Index
+provider reads them with **no client changes**. Supports deterministic
+sharding (`--shard 2/8`) so multiple crawlers can partition a corpus.
+Full guide: **[docs/SEEDING.md](docs/SEEDING.md)**.
+
+### 4. The community index (kind 30078)
 
 The Submit button in the header lets any logged-in user add a link. The event
 schema (`src/lib/communityIndex.ts`):
@@ -271,7 +298,7 @@ identity — so every submission grows the shared document index too
 `javascript:`/`data:` and friends are rejected at parse and build time
 (`isValidSubmissionUrl` in `src/lib/contentType.ts`).
 
-### 4. Theming (light & dark)
+### 5. Theming (light & dark)
 
 Themes are CSS variables in `src/index.css` — `:root` (light) and `.dark`.
 The `system` option follows the OS. To rebrand:
@@ -281,7 +308,7 @@ The `system` option follows the OS. To rebrand:
 3. The theme picker lives in Settings → Appearance
    (`THEMES` in `src/pages/Settings.tsx`).
 
-### 5. Relays
+### 6. Relays
 
 Two relay layers, both editable in Settings:
 
@@ -310,7 +337,7 @@ Index observations publish to the search pool plus `INDEX_WRITE_RELAYS`
 Change the defaults in `src/lib/appRelays.ts` (`APP_RELAYS` for the NIP-65
 defaults, `SEARCH_RELAYS` for the search pool).
 
-### 6. Make it yours — checklist
+### 7. Make it yours — checklist
 
 - [ ] Rename "Uncaged Engine" in `src/components/Layout.tsx`,
       `src/pages/Index.tsx`, `index.html`, `public/manifest.webmanifest`
