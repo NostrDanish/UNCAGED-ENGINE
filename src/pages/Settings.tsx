@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { useSeoMeta } from '@unhead/react';
 import {
   Settings as SettingsIcon, Sun, Moon, Monitor,
-  Plus, Trash2, RefreshCw, Globe, Fingerprint, Copy, Download,
+  Plus, Trash2, RefreshCw, RotateCcw, Globe, Fingerprint, Copy, Download,
   CheckCircle2, XCircle, CircleDashed, Check, Zap,
 } from 'lucide-react';
 
@@ -266,7 +266,7 @@ function YourRelaysSection() {
 /* ------------------------------------------------------------------ */
 
 function SearchRelaysSection() {
-  const { pool, testing, testRelays, addRelay, removeRelay } = useSearchRelayPool();
+  const { pool, testing, testRelays, addRelay, removeRelay, restoreDefaults, removedCount } = useSearchRelayPool();
   const { toast } = useToast();
   const [newUrl, setNewUrl] = useState('');
 
@@ -274,7 +274,10 @@ function SearchRelaysSection() {
     if (!newUrl.trim()) return;
     const added = addRelay(newUrl);
     if (added) {
-      toast({ title: 'Search relay added', description: `${added} is now queried on every search.` });
+      toast({
+        title: added.origin === 'default' ? 'Default relay restored' : 'Search relay added',
+        description: `${added.url} is now queried on every search.`,
+      });
       setNewUrl('');
     } else {
       toast({
@@ -287,21 +290,38 @@ function SearchRelaysSection() {
 
   return (
     <section className="mb-10">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-1 gap-2">
         <h2 className="text-sm font-semibold">Search Relays</h2>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void testRelays()}
-          disabled={testing}
-        >
-          <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', testing && 'animate-spin')} />
-          {testing ? 'Testing…' : 'Test latency'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {removedCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                restoreDefaults();
+                toast({ title: 'Defaults restored', description: 'All built-in search relays are back in the pool.' });
+              }}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+              Restore defaults
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void testRelays()}
+            disabled={testing}
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', testing && 'animate-spin')} />
+            {testing ? 'Testing…' : 'Test latency'}
+          </Button>
+        </div>
       </div>
       <p className="text-xs text-muted-foreground mb-4">
-        NIP-50 relays queried in parallel for every search (Nostr search, the web index,
-        and the community index). Add your own to widen coverage.
+        Relays queried in parallel for every search (Nostr content, the SIP-01 web index,
+        and the community index) — and the first publish target for index observations.
+        Add your own relays, or remove any default you don't trust.
       </p>
 
       {/* Add custom */}
@@ -377,20 +397,21 @@ function SearchRelaysSection() {
                   </span>
                 )}
               </div>
-              {entry.origin === 'custom' && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => {
-                    removeRelay(entry.url);
-                    toast({ title: 'Search relay removed', description: entry.url });
-                  }}
-                  aria-label={`Remove ${hostname}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => {
+                  removeRelay(entry.url);
+                  toast({
+                    title: entry.origin === 'default' ? 'Default relay removed' : 'Search relay removed',
+                    description: `${entry.url} — restore defaults anytime to bring built-ins back.`,
+                  });
+                }}
+                aria-label={`Remove ${hostname}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
             </div>
           );
         })}

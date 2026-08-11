@@ -1,16 +1,21 @@
 /**
- * Search relay pool hook — React state over the NIP-50 search relay pool
+ * Search relay pool hook — React state over the search relay pool
  * (app defaults + user customs), with latency testing:
  * ping each relay with a tiny query and time the round-trip.
- * ping each relay with a tiny query and time the round-trip.
+ *
+ * The pool is fully user-editable: customs can be added, and ANY relay —
+ * default included — can be removed. Removed defaults can be restored
+ * with restoreDefaults().
  */
 import { useCallback, useState } from 'react';
 
 import {
-  SEARCH_RELAYS,
-  getCustomSearchRelays,
-  addCustomSearchRelay,
-  removeCustomSearchRelay,
+  addSearchRelay,
+  removeSearchRelay,
+  restoreDefaultSearchRelays,
+  getRemovedSearchRelays,
+  getSearchRelayUrls,
+  isDefaultSearchRelay,
 } from '@/lib/appRelays';
 import { getSearchRelay } from '@/lib/searchRelays';
 
@@ -25,34 +30,38 @@ export interface SearchRelayEntry {
 }
 
 function buildPool(): SearchRelayEntry[] {
-  const defaults = SEARCH_RELAYS.map((url): SearchRelayEntry => ({
+  return getSearchRelayUrls().map((url): SearchRelayEntry => ({
     url,
-    origin: 'default',
+    origin: isDefaultSearchRelay(url) ? 'default' : 'custom',
     status: 'untested',
   }));
-  const customs = getCustomSearchRelays()
-    .filter((u) => !(SEARCH_RELAYS as readonly string[]).includes(u))
-    .map((url): SearchRelayEntry => ({
-      url,
-      origin: 'custom',
-      status: 'untested',
-    }));
-  return [...defaults, ...customs];
 }
 
 export function useSearchRelayPool() {
   const [pool, setPool] = useState<SearchRelayEntry[]>(buildPool);
   const [testing, setTesting] = useState(false);
+  // Defaults the user has removed — drives the "Restore defaults" affordance.
+  const [removedCount, setRemovedCount] = useState(() => getRemovedSearchRelays().length);
 
-  const addRelay = useCallback((input: string): string | null => {
-    const added = addCustomSearchRelay(input);
-    if (added) setPool(buildPool());
+  const addRelay = useCallback((input: string): { url: string; origin: 'default' | 'custom' } | null => {
+    const added = addSearchRelay(input);
+    if (added) {
+      setPool(buildPool());
+      setRemovedCount(getRemovedSearchRelays().length);
+    }
     return added;
   }, []);
 
   const removeRelay = useCallback((url: string) => {
-    removeCustomSearchRelay(url);
+    removeSearchRelay(url);
     setPool(buildPool());
+    setRemovedCount(getRemovedSearchRelays().length);
+  }, []);
+
+  const restoreDefaults = useCallback(() => {
+    restoreDefaultSearchRelays();
+    setPool(buildPool());
+    setRemovedCount(0);
   }, []);
 
   /** Ping every relay with a limit-1 query and record latency/status. */
@@ -87,5 +96,5 @@ export function useSearchRelayPool() {
     setTesting(false);
   }, [pool]);
 
-  return { pool, testing, testRelays, addRelay, removeRelay };
+  return { pool, testing, testRelays, addRelay, removeRelay, restoreDefaults, removedCount };
 }

@@ -288,11 +288,24 @@ Two relay layers, both editable in Settings:
 - **Your Relays (NIP-65, kind 10002)** — the user's personal relay list for
   login/profile/submissions. Synced from Nostr on login, published back on
   change.
-- **Search Relays (NIP-50)** — the pool every search query fans out to
-  (`SEARCH_RELAYS` in `src/lib/appRelays.ts`). Defaults:
-  `relay.nostr.band`, `relay.ditto.pub`, `search.nos.today`,
-  `relay.noswhere.com`. Users can add their own (stored locally) and test
-  latency from Settings.
+- **Search Relays (NIP-50 + SIP-01)** — the pool every search query fans out
+  to, and the first publish target for index observations. Defaults
+  (`SEARCH_RELAYS` in `src/lib/appRelays.ts`):
+  - *SIP-01 index network:* `relay-na1.metanomalist.com` (the validating
+    UNCAGED Index Relay), `relay.ditto.pub`, `jskitty.cat/nostr`,
+    a Tor onion relay (`ws://….onion`, reachable for Tor Browser users),
+    `search.nos.today`, `relay.primal.net`, `nostr.hifish.org`
+  - *NIP-50 full-text:* `relay.nostr.band`, `relay.noswhere.com`
+
+  **Fully user-editable:** users can add custom relays AND remove any
+  default (stored locally in `uncaged:search-relays:*`), with a
+  one-click "Restore defaults" in Settings. Re-adding a removed default
+  restores it as a default rather than duplicating it as a custom.
+  Settings also includes a per-relay latency tester — the onion relay
+  honestly shows as unreachable outside Tor.
+
+Index observations publish to the search pool plus `INDEX_WRITE_RELAYS`
+(ditto/primal/damus) for wider propagation — `getIndexPublishRelays()`.
 
 Change the defaults in `src/lib/appRelays.ts` (`APP_RELAYS` for the NIP-65
 defaults, `SEARCH_RELAYS` for the search pool).
