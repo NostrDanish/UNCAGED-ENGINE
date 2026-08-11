@@ -234,7 +234,25 @@ The full wire format is specified in
 `src/lib/webIndex.ts`, covered by the spec's §13 test vectors in
 `webIndex.test.ts`.
 
-### 3. The community index (kind 30078)
+### 3. Bootstrapping the index (seed data)
+
+A fresh index is empty — crawlers alone take months to find the web. The
+`seed` script converts existing web-metadata corpora (reference source:
+[OfflineWebSearch](https://github.com/rumca-js/OfflineWebSearch)'s curated
+SQLite datasets) into SIP-01 observations, byte-compatibly:
+
+```bash
+curl -LO https://rumca-js.github.io/data/top.db.zip && unzip top.db.zip
+npm run seed -- top.db                      # → seed-top.jsonl (dry run)
+npm run seed -- top.db --publish --nsec nsec1…   # sign + publish to relays
+```
+
+Seeded documents arrive as ordinary kind 39697 events — the Web Index
+provider reads them with **no client changes**. Supports deterministic
+sharding (`--shard 2/8`) so multiple crawlers can partition a corpus.
+Full guide: **[docs/SEEDING.md](docs/SEEDING.md)**.
+
+### 4. The community index (kind 30078)
 
 The Submit button in the header lets any logged-in user add a link. The event
 schema (`src/lib/communityIndex.ts`):
@@ -271,7 +289,7 @@ identity — so every submission grows the shared document index too
 `javascript:`/`data:` and friends are rejected at parse and build time
 (`isValidSubmissionUrl` in `src/lib/contentType.ts`).
 
-### 4. Theming (light & dark)
+### 5. Theming (light & dark)
 
 Themes are CSS variables in `src/index.css` — `:root` (light) and `.dark`.
 The `system` option follows the OS. To rebrand:
@@ -281,7 +299,7 @@ The `system` option follows the OS. To rebrand:
 3. The theme picker lives in Settings → Appearance
    (`THEMES` in `src/pages/Settings.tsx`).
 
-### 5. Relays
+### 6. Relays
 
 Two relay layers, both editable in Settings:
 
@@ -310,7 +328,7 @@ Index observations publish to the search pool plus `INDEX_WRITE_RELAYS`
 Change the defaults in `src/lib/appRelays.ts` (`APP_RELAYS` for the NIP-65
 defaults, `SEARCH_RELAYS` for the search pool).
 
-### 6. Make it yours — checklist
+### 7. Make it yours — checklist
 
 - [ ] Rename "Uncaged Engine" in `src/components/Layout.tsx`,
       `src/pages/Index.tsx`, `index.html`, `public/manifest.webmanifest`
