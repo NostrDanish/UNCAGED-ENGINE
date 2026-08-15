@@ -7,10 +7,12 @@ import { Layout } from '@/components/Layout';
 import { SearchBar } from '@/components/SearchBar';
 import { SourceTabs, type SourceTabValue } from '@/components/SourceTabs';
 import { UnifiedResultCard } from '@/components/UnifiedResultCard';
+import { AIAnswerCard } from '@/components/AIAnswerCard';
 import { ProviderStatus } from '@/components/ProviderStatus';
 import { SearchSkeleton } from '@/components/SearchSkeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { useProviderSearch } from '@/hooks/useProviderSearch';
+import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
 
 const Index = () => {
@@ -48,6 +50,10 @@ const Index = () => {
   }, [results, source]);
 
   const totalResults = filteredResults.length;
+
+  // AI Answer layer — synthesizes from the search evidence (opt-in,
+  // Settings → AI). Runs only for text-class queries with enough evidence.
+  const ai = useAIAnswer(activeQuery, results, hasSearched);
 
   useSeoMeta({
     title: hasSearched ? `${activeQuery} - Uncaged Engine` : 'Uncaged Engine - Nostr Search Engine Template',
@@ -141,6 +147,17 @@ const Index = () => {
         </div>
 
         <div className="max-w-2xl">
+          {/* AI answer — synthesized from the search evidence (opt-in) */}
+          {ai.active && (
+            <AIAnswerCard
+              answer={ai.answer}
+              evidence={ai.evidence}
+              isLoading={ai.isLoading}
+              error={ai.error}
+              className="mb-4"
+            />
+          )}
+
           {/* Loading state */}
           {isLoading && totalResults === 0 ? (
             <SearchSkeleton />

@@ -248,6 +248,31 @@ function rowToTags(row: Row): string[] {
   return [];
 }
 
+/**
+ * FNV-1a 32-bit hash — the shard key for --shard. Deterministic and
+ * uniformly distributed over URL strings (crypto hashing via buildIndexEvent
+ * is deliberately not reused here: sharding runs BEFORE the async build so
+ * skipped rows cost nothing).
+ */
+function fnv1a(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * Coerce a string into the spec §9.1 keyword shape
+ * (^[a-zA-Z0-9][a-zA-Z0-9_-]{0,49}$) for experimental extension tag values.
+ */
+function keywordShape(value: string): string {
+  const cleaned = value.toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '').slice(0, 50);
+  return cleaned || 'unknown';
+}
+
 /* ------------------------------------------------------------------ */
 /* Convert                                                             */
 /* ------------------------------------------------------------------ */
@@ -287,9 +312,10 @@ async function convert(opts: CliOptions) {
 
     // Deterministic sharding: same URL always lands in the same shard,
     // so N crawler processes can partition the corpus without coordination.
+    // FNV-1a over the normalized URL — cheap, uniform, and stable across
+    // runs (unlike hex-parsing the URL tail, which skews on non-hex paths).
     if (opts.shard) {
-      const shardKey = parseInt(normalized.replace(/\W/g, '').slice(-8), 16) || 0;
-      if (shardKey % opts.shard.of !== opts.shard.index - 1) {
+      if (fnv1a(normalized) % opts.shard.of !== opts.shard.index - 1) {
         stats.shardedOut++;
         continue;
       }
@@ -313,8 +339,10 @@ async function convert(opts: CliOptions) {
     });
     if (!template) { stats.badUrl++; continue; }
 
-    // Provenance marker — experimental extension tag per spec §9.1 rule 6.
-    template.tags.push(['x-seed', `offlinewebsearch:${dataset}`.slice(0, 50)]);
+    // Provenance marker — experimental extension tag per spec §9.1 rule 6,
+    // keyword-shaped per §9.1 rule 5 (no colons; dataset comes from a
+    // filename, so sanitize).
+    template.tags.push(['x-seed', keywordShape(`offlinewebsearch-${dataset}`)]);
 
     out.push(JSON.stringify(template));
     stats.kept++;

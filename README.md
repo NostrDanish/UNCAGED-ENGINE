@@ -28,6 +28,16 @@ to Nostr relays over WebSocket.
   canonical spec at [github.com/NostrDanish/SIP-01](https://github.com/NostrDanish/SIP-01).
 - **Community index (kind 30078)** — any logged-in Nostr user can submit
   links. Signed, attributable, relay-filterable.
+- **AI answers (optional)** — an evidence-cited AI layer over the results:
+  BYOK (any OpenAI-compatible API), engine-provided tier (operator key via
+  a same-origin proxy), and a built-in free tier. Off by default; answers
+  are ephemeral and never indexed.
+- **Moderation & abuse reports** — team-signed NIP-32 labels (kind 1985)
+  hide results for every user; NIP-56 reports (kind 1984) from any result
+  card land in the admin inbox; un-hiding is a NIP-09 deletion.
+- **Team console (`/admin`)** — role-gated dashboard: stats, reports inbox,
+  moderation, filter tester, engine-AI management, and owner-managed roles
+  (owner-signed kind 30078 role lists).
 - **Complete search UI/UX** — hero search page, live per-provider status,
   result cards, source tabs (All / Nostr / Web), skeletons, empty states,
   keyboard shortcuts (`Ctrl+K` / `/`), shareable `?q=` URLs, OpenSearch.
@@ -46,6 +56,9 @@ providers, instant answers, trending queries, the explore page, the autosigner
 worker, the self-hosted backend, and extra themes. They all live in
 [0xSearchstr](https://github.com/NostrDanish/0xSearchstr) if you want
 reference implementations — the provider interface here is the same one.
+The moderation + admin console and the AI answer layer are ported from
+[0xPresearchstr](https://github.com/NostrDanish/0xPresearchstr); its
+keyword-staking, votes, and term signals remain there as reference.
 
 ---
 
@@ -185,16 +198,27 @@ index). The index grows from the first submission — no external provider
 needed.
 
 **B. Search-driven indexing.** After every search, `useSearchIndexer`
-contributes fresh web pages the providers surfaced:
+contributes the web pages the search surfaced. In a Nostr-native engine,
+"discovered web pages" are the ones Nostr content *references*:
+
+- **File metadata (kind 1063)** — the `url` tag is a real web resource with
+  an author-provided title/description → rich observation.
+- **Links cited in notes/articles** — a web link referenced by content that
+  matched your query is a genuine discovery signal → discovery-layer
+  observation (host as title, no description — the citing text is commentary,
+  never page metadata; crawlers enrich these later).
+- **Any external provider you add** (see "Adding a provider") — its http(s)
+  results are indexed automatically.
 
 ```
 search results arrive
        │
        ▼
 useSearchIndexer filters:
-  ✗ skip Nostr-native results (already on relays)
-  ✗ skip results that came FROM the index (no echo loop)
-  ✗ skip non-http(s) URLs
+  ✗ skip results that came FROM the index (web-index/community — no echo loop)
+  ✗ skip Nostr content itself (already on relays)
+  ✓ keep Nostr results that REFERENCE a web page (webUrl)
+  ✓ keep http(s) results from external providers
        │
        ▼
 for each remaining URL (max 10 per search):
@@ -204,10 +228,8 @@ for each remaining URL (max 10 per search):
   publish to the index relay set
 ```
 
-Search-driven indexing is quiet out of the box (all built-in web results
-come FROM the index — re-indexing them would be an echo loop) and switches on
-automatically when you add a provider that discovers fresh web pages
-(see "Adding a provider").
+Settings → Indexing shows a live count of observations published this
+session, so you can watch the index grow as you search.
 
 - **The query is never published.** The event contains a URL and its public
   metadata — nothing about who searched for what.
@@ -218,9 +240,9 @@ automatically when you add a provider that discovers fresh web pages
   produce events with the same `d` tag — search nodes group by `d` and count
   distinct authors ("N independent indexers saw this page").
 
-**Spec conformance (v1.1):** `src/lib/webIndex.ts` is the reference
+**Spec conformance (v1.2):** `src/lib/webIndex.ts` is the reference
 implementation — byte-compatible URL normalization (spec §7) and content
-hashing (§8), proven by the §13 test vectors in `webIndex.test.ts`. The
+hashing (§8), proven by the §13/§19 test vectors in `webIndex.test.ts`. The
 registered extension tags (§9.2 — `type`, `platform`, `category`, `network`,
 `country`, `mime`) are supported on build and parse; the Web Index provider
 uses NIP-50 acceleration with web operators (`site:`, `lang:`, …) on
@@ -289,7 +311,65 @@ identity — so every submission grows the shared document index too
 `javascript:`/`data:` and friends are rejected at parse and build time
 (`isValidSubmissionUrl` in `src/lib/contentType.ts`).
 
-### 5. Theming (light & dark)
+### 5. Moderation & the team console (`/admin`)
+
+Nostr-native moderation, no database:
+
+- **Reports (NIP-56, kind 1984)** — every result card has a flag button.
+  Reports are signed by the reporter's key under the `uncaged.abuse`
+  namespace and land in Admin → Reports.
+- **Moderation labels (NIP-32, kind 1985)** — team members hide a URL or
+  event id with one click; the label is published to the moderation relay
+  set and **every client filters it out** within a minute. Un-hiding
+  publishes a NIP-09 deletion. Clients trust labels from the owner + team
+  role lists only — the author filter is the trust boundary.
+- **Roles (kind 30078)** — the owner manages admins/moderators as
+  owner-signed addressable lists (`uncaged:admin-roles` /
+  `uncaged:mod-roles`); every client resolves them live. Team members see
+  an "Admin console" entry in their account menu.
+- **Filter test** — check whether a URL/event id is currently filtered.
+- **Stats** — live index + community + moderation counters.
+
+⚠️ **`OWNER_PUBKEY` in `src/lib/moderation.ts` is the trust root.** It's set
+to this project's owner — if you fork, replace it with your own pubkey or
+your role lists and labels won't be trusted by your deployment.
+
+### 6. AI answers (optional, off by default)
+
+An AI layer sits AFTER the search federation: the top results become a
+numbered evidence pack, and an OpenAI-compatible model synthesizes an answer
+with clickable `[n]` citations (`AIAnswerCard` above the results). Answers
+are ephemeral — never indexed into SIP-01.
+
+**Credential precedence (exactly):**
+
+```
+User's own key (Settings → AI)   ← always wins; stored only in their browser
+        ↓
+Engine-provided AI (/api/ai)     ← operator's key, server-side only (worker)
+        ↓
+Built-in free tier               ← shared rate-limited PPQ key, locked model,
+                                   public by design (ships in the bundle)
+        ↓
+AI unavailable                   ← only for forks that remove the built-in key
+```
+
+- **BYOK** — PPQ.ai, OpenRouter, OpenAI, Ollama (local, no key), or any
+  custom OpenAI-compatible endpoint. Provider/endpoint/model unlock the
+  moment a key is pasted.
+- **Engine tier** — a thin same-origin proxy over `src/lib/ai/engineProxy.ts`
+  serves users with no key of their own; Admin → AI manages it (status,
+  set/clear key, enable toggle, test) with NIP-98-flavored signed events
+  (kind 27235) — no accounts or passwords. The proxy requires a server-side
+  deployment (a Cloudflare Worker shell is ~100 lines over the tested
+  `engineProxy` functions; add one if you deploy to an edge platform).
+  On static hosting the tab reports "not configured" and everything else
+  keeps working.
+- **Privacy boundaries** — AI runs only on plain-text queries (NIP-19/05
+  identifiers and URLs are never sent — see `src/lib/queryClassify.ts`);
+  Nostr results are excluded from evidence unless the user opts in.
+
+### 7. Theming (light & dark)
 
 Themes are CSS variables in `src/index.css` — `:root` (light) and `.dark`.
 The `system` option follows the OS. To rebrand:
@@ -299,7 +379,7 @@ The `system` option follows the OS. To rebrand:
 3. The theme picker lives in Settings → Appearance
    (`THEMES` in `src/pages/Settings.tsx`).
 
-### 6. Relays
+### 8. Relays
 
 Two relay layers, both editable in Settings:
 
@@ -328,16 +408,21 @@ Index observations publish to the search pool plus `INDEX_WRITE_RELAYS`
 Change the defaults in `src/lib/appRelays.ts` (`APP_RELAYS` for the NIP-65
 defaults, `SEARCH_RELAYS` for the search pool).
 
-### 7. Make it yours — checklist
+### 9. Make it yours — checklist
 
 - [ ] Rename "Uncaged Engine" in `src/components/Layout.tsx`,
       `src/pages/Index.tsx`, `index.html`, `public/manifest.webmanifest`
 - [ ] Replace `public/favicon.svg`
 - [ ] Point `public/opensearch.xml` at your deployed origin
+- [ ] **Replace `OWNER_PUBKEY` in `src/lib/moderation.ts` with your own key**
+      (the admin console, roles, and moderation labels trust it)
 - [ ] Adjust default relays in `src/lib/appRelays.ts`
 - [ ] Pick your accent color in `src/index.css`
+- [ ] Empty `COMMUNITY_AI_KEY` in `src/lib/aiConfig.ts` if you don't want to
+      share the built-in free AI tier (BYOK + engine tier still work)
 - [ ] If you fork the protocol: pick your own `d`-tag/`t`-tag namespaces in
-      `src/lib/communityIndex.ts` (or keep `uncaged-*` to federate)
+      `src/lib/communityIndex.ts` and `src/lib/moderation.ts` (or keep
+      `uncaged-*` to federate)
 
 ---
 
@@ -347,15 +432,19 @@ defaults, `SEARCH_RELAYS` for the search pool).
 |---|---|
 | **NIP-50** | `search` filter keyword against search-capable relays |
 | **39697** | SIP-01 web index observations (addressable, per-device indexer keys) — [spec](docs/SIP-01.md) |
-| **30078** | Community link submissions (NIP-78 application data) |
+| **30078** | Community link submissions + team role lists (NIP-78 application data) |
+| **1985** | NIP-32 moderation labels ("hidden" results, team-signed) |
+| **1984** | NIP-56 abuse reports (result card flag → admin inbox) |
+| **5** | NIP-09 deletion (un-hide a result) |
+| **27235** | NIP-98-flavored engine-AI admin auth (signed config writes) |
 | **0** | Profile metadata (search results + author cards) |
 | **1** | Notes (search results) |
-| **1063** | File metadata, NIP-94 (search results) |
+| **1063** | File metadata, NIP-94 (search results; their `url` feeds auto-indexing) |
 | **30023** | Long-form articles, NIP-23 (search results) |
 | **30818** | Wiki articles, NIP-54 (search results) |
 | **10002** | NIP-65 relay list (synced/published in Settings) |
 | **NIP-19** | `npub`/`note`/`nevent`/`naddr`/`nprofile` routes at `/:nip19` |
-| **NIP-31** | `alt` tags on all published events |
+| **NIP-31** | `alt` convention on all published events |
 
 Full schemas and tag tables: **[NIP.md](NIP.md)**.
 
@@ -372,32 +461,55 @@ src/
 │   │   ├── nostr.ts          ← NIP-50 relay search
 │   │   ├── web-index.ts      ← SIP-01 kind 39697 index reader
 │   │   └── community.ts      ← kind 30078 curated links
+│   ├── ai/
+│   │   ├── types.ts          ← AIProvider / AIEvidenceItem contracts
+│   │   ├── registry.ts       ← AI provider catalog (PPQ, OpenRouter, …)
+│   │   ├── openai-compatible.ts ← the one provider shape that covers all
+│   │   ├── prompts.ts        ← evidence-cited answer prompts
+│   │   ├── engineProxy.ts    ← server-side engine-AI logic (worker shell)
+│   │   └── engineAdmin.ts    ← signed admin actions (kind 27235)
 │   ├── webIndex.ts           ← SIP-01: URL normalization, build/parse/validate
 │   ├── indexPublisher.ts     ← signs + publishes kind 39697 observations
 │   ├── indexerIdentity.ts    ← per-device anonymous indexer keypair
 │   ├── communityIndex.ts     ← submission schema (build + parse)
+│   ├── moderation.ts         ← NIP-32 labels, roles, trust root
+│   ├── reports.ts            ← NIP-56 abuse report builders
+│   ├── aiConfig.ts           ← AI tiers + credential precedence
+│   ├── corsProxy.ts          ← proxied fetch with failover (AI calls)
+│   ├── queryClassify.ts      ← what KIND of query is this (AI gating)
 │   ├── contentType.ts        ← link type detection + URL allowlist
 │   ├── appRelays.ts          ← default relays + search relay pool
-│   ├── searchRelays.ts       ← dedicated relay connections (NRelay1)
+│   ├── searchRelays.ts       ← relay connections + pool query/publish
 │   ├── sanitizeUrl.ts        ← URL sanitizer (https/http only)
 │   └── nostrHelpers.ts       ← kind labels, timeAgo, nip19 helpers
 ├── hooks/
-│   ├── useProviderSearch.ts  ← the orchestrator (parallel + merge + rank)
+│   ├── useProviderSearch.ts  ← the orchestrator (parallel + merge + rank
+│   │                           + moderation filtering)
 │   ├── useSearchIndexer.ts   ← auto-indexing (SIP-01 publisher)
+│   ├── useAIAnswer.ts        ← evidence pack → cited AI answer
+│   ├── useModeration.ts      ← hidden set, reports inbox, team actions
+│   ├── useAdminAccess.ts     ← role resolution (owner/admin/moderator)
+│   ├── useEngineAIStatus.ts  ← /api/ai status probe
+│   ├── useIndexStats.ts      ← admin stats counters
 │   ├── useSearchRelayPool.ts ← search relay pool + latency tester
 │   └── useSearchHotkeys.ts   ← Ctrl+K / "/" focus the search bar
 ├── components/
 │   ├── SearchBar.tsx         ← the search input (hero + compact)
 │   ├── SourceTabs.tsx        ← All / Nostr / Web tabs with counts
 │   ├── ProviderStatus.tsx    ← live per-provider status + latency
-│   ├── UnifiedResultCard.tsx ← one card for every result type
+│   ├── UnifiedResultCard.tsx ← one card for every result type (+ report flag)
+│   ├── AIAnswerCard.tsx      ← the synthesized answer with [n] citations
+│   ├── ReportDialog.tsx      ← NIP-56 report form
 │   ├── SearchSkeleton.tsx    ← loading skeletons
 │   ├── SubmitToIndex.tsx     ← community submission dialog
 │   └── auth/                 ← Nostr login (signup, NIP-07, nsec, NIP-46)
-└── pages/
-    ├── Index.tsx             ← hero + results (the whole search UX)
-    ├── Settings.tsx          ← theme, indexing, relays
-    └── NIP19Page.tsx         ← profile/event rendering for /:nip19
+├── pages/
+│   ├── Index.tsx             ← hero + results (the whole search UX)
+│   ├── Settings.tsx          ← theme, indexing, AI, relays
+│   ├── Admin.tsx             ← team console (stats/reports/moderation/AI/roles)
+│   └── NIP19Page.tsx         ← profile/event rendering for /:nip19
+└── scripts/
+    └── seed-import.ts        ← corpus → SIP-01 observations (npm run seed)
 ```
 
 ## Privacy, honestly

@@ -19,6 +19,29 @@ import { buildIndexEvent, normalizeIndexUrl, type IndexObservationInput } from '
 import { getIndexPublishRelays } from '@/lib/appRelays';
 import { getSearchRelay } from '@/lib/searchRelays';
 
+/* ------------------------------------------------------------------ */
+/* Session stats — lets the UI show that indexing is actually working  */
+/* ------------------------------------------------------------------ */
+
+let publishedThisSession = 0;
+const statsListeners = new Set<(published: number) => void>();
+
+/** Observations published since the page loaded. */
+export function getSessionPublishedCount(): number {
+  return publishedThisSession;
+}
+
+/** Subscribe to the session publish count. Returns an unsubscribe function. */
+export function subscribeSessionStats(listener: (published: number) => void): () => void {
+  statsListeners.add(listener);
+  return () => statsListeners.delete(listener);
+}
+
+function notePublished(): void {
+  publishedThisSession++;
+  for (const listener of statsListeners) listener(publishedThisSession);
+}
+
 /** Publish a signed observation to all index relays (best-effort). */
 async function publishToIndexRelays(signedEvent: NostrEvent): Promise<void> {
   await Promise.allSettled(
@@ -54,5 +77,6 @@ export async function publishIndexObservation(
   );
 
   await publishToIndexRelays(signedEvent);
+  notePublished();
   return normalized;
 }

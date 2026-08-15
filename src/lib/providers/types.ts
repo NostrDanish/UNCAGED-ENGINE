@@ -46,6 +46,13 @@ export interface SearchResult {
   tags?: string[];
   /** Original Nostr event data if applicable. */
   nostrEvent?: import('@nostrify/nostrify').NostrEvent;
+  /**
+   * External web URL referenced by this result, when the result itself is
+   * Nostr-native (internal /:nip19 `url`) but points at a web document —
+   * e.g. a kind 1063 file's `url` tag, or a link cited in a note's content.
+   * The auto-indexer indexes this URL into the SIP-01 web index.
+   */
+  webUrl?: string;
   /** Score used for ranking (higher = better). */
   score?: number;
 }

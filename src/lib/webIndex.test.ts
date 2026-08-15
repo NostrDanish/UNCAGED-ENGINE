@@ -124,6 +124,14 @@ describe('spec §13 test vectors', () => {
       '2a5cbdf44513f552fb571d6c6de2ddf16c5452b235cc887980b52898fb38e7c1',
     );
   });
+
+  it('reproduces the §19 extension-tagged example hash (v1.2)', async () => {
+    // The spec's fully self-consistent example event (with unicode em-dash).
+    expect(await contentHash(
+      'Crwalstr — a browser-based web crawler for Nostr',
+      'A browser-based web crawler that publishes SIP-01 web index observations.',
+    )).toBe('babd08c579e107b98a360a7f713d5d822bbd9f24087b86d98404db214f0e5500');
+  });
 });
 
 describe('buildIndexEvent', () => {

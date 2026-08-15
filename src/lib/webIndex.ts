@@ -352,13 +352,52 @@ export async function verifyObservation(obs: IndexObservation): Promise<boolean>
 
 /** Convert a search result into an observation input (for auto-indexing). */
 export function observationFromResult(result: SearchResult): IndexObservationInput | null {
-  if (!result.url || !/^https?:\/\//i.test(result.url)) return null;
+  const url = result.webUrl ?? result.url;
+  if (!url || !/^https?:\/\//i.test(url)) return null;
   if (!result.title?.trim()) return null;
   return {
-    url: result.url,
+    url,
     title: result.title,
     description: result.snippet,
     image: result.thumbnail,
+    tags: result.tags,
+    published: result.timestamp,
+    source: 'uncaged-engine/1',
+  };
+}
+
+/**
+ * Convert a Nostr-native result that references a web page (webUrl) into an
+ * observation input.
+ *
+ * - File metadata (kind 1063): rich observation — the author-provided title
+ *   (alt) and description (content) describe the linked resource itself.
+ * - Links cited in notes/articles: honest discovery-layer observation —
+ *   we know the URL exists and that someone referenced it, but we have NOT
+ *   fetched the page, so the title is just the host and there is no
+ *   description. Crawlers flesh these out later; the addressable d-tag
+ *   means a richer observation simply replaces this one.
+ *
+ * Hashtags from the citing content carry over as topics (validated by
+ * buildIndexEvent). The citing note's text is NEVER used as the page's
+ * description — it is commentary, not page metadata.
+ */
+export function observationFromNostrResult(result: SearchResult): IndexObservationInput | null {
+  const url = result.webUrl;
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+
+  let host = '';
+  try { host = new URL(url).hostname; } catch { return null; }
+
+  const isFile = result.kind === 'File';
+  const title = isFile && result.title.trim() ? result.title.trim() : host;
+  if (!title) return null;
+
+  return {
+    url,
+    title,
+    description: isFile ? result.snippet : '',
+    image: isFile ? result.thumbnail : undefined,
     tags: result.tags,
     published: result.timestamp,
     source: 'uncaged-engine/1',

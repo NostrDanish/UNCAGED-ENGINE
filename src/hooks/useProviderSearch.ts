@@ -15,6 +15,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { SearchResult, SearchSource, ProviderSearchResponse } from '@/lib/providers/types';
 import { getProvidersForSource } from '@/lib/providers/registry';
+import { isHiddenResult } from '@/lib/moderation';
+import { useModerationSet } from '@/hooks/useModeration';
 import { useSearchIndexer } from '@/hooks/useSearchIndexer';
 
 export type ProviderStatus = 'idle' | 'searching' | 'done' | 'error';
@@ -59,6 +61,8 @@ export function useProviderSearch({
   const queryClient = useQueryClient();
   const activeProviders = useMemo(() => getProvidersForSource(source), [source]);
   const { indexResults } = useSearchIndexer();
+  // Team-signed moderation list — hidden URLs/event ids are filtered for everyone.
+  const moderationSet = useModerationSet();
 
   // Provider states tracked outside React Query for per-provider granularity.
   const [providerStates, setProviderStates] = useState<Map<string, ProviderState>>(new Map());
@@ -158,7 +162,13 @@ export function useProviderSearch({
     placeholderData: (prev) => prev,
   });
 
-  const allResults = data?.results ?? [];
+  // Apply team-signed moderation filtering to the merged results.
+  // (Additive: until the moderation list loads, nothing is filtered.)
+  const baseResults = data?.results ?? [];
+  const allResults = useMemo(() => {
+    if (!moderationSet) return baseResults;
+    return baseResults.filter((r) => !isHiddenResult(r, moderationSet));
+  }, [baseResults, moderationSet]);
   const suggestions = data?.suggestions ?? [];
 
   // Reset provider states when query clears.

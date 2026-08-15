@@ -5,11 +5,13 @@
  * - Other Nostr results (notes, articles, files): internal /:nip19 link
  * - Web results (index observations, community links): external link card
  */
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Globe, ExternalLink, Zap, User, FileText } from 'lucide-react';
+import { Globe, ExternalLink, Zap, User, FileText, Flag } from 'lucide-react';
 
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { ReportDialog } from '@/components/ReportDialog';
 import type { SearchResult } from '@/lib/providers/types';
 import { cn } from '@/lib/utils';
 
@@ -65,8 +67,11 @@ function NostrProfileCard({ result, className }: { result: SearchResult; classNa
 
 /* ─── Nostr note / article / file ─── */
 function NostrCard({ result, className }: { result: SearchResult; className?: string }) {
+  const [reportOpen, setReportOpen] = useState(false);
+
   return (
-    <Link to={result.url} className={cn('block group', className)}>
+    <>
+      <Link to={result.url} className={cn('block group', className)}>
       <div className="p-4 rounded-xl border border-border/50 bg-card hover:border-primary/30 hover:bg-card/80 transition-all duration-200">
         {/* Header */}
         <div className="flex items-center gap-2 mb-2.5">
@@ -102,28 +107,52 @@ function NostrCard({ result, className }: { result: SearchResult; className?: st
           {result.snippet}
         </p>
 
-        {/* Tags */}
-        {result.tags && result.tags.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-3">
-            {result.tags.slice(0, 4).map((tag) => (
-              <span key={tag} className="text-xs text-primary/60 font-mono">#{tag}</span>
-            ))}
-          </div>
-        )}
+        {/* Tags + report */}
+        <div className="flex items-center gap-1.5 mt-3">
+          {result.tags && result.tags.length > 0 && (
+            <>
+              {result.tags.slice(0, 4).map((tag) => (
+                <span key={tag} className="text-xs text-primary/60 font-mono">#{tag}</span>
+              ))}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setReportOpen(true); }}
+            className="ml-auto inline-flex items-center p-1 rounded-md text-muted-foreground/50 hover:text-destructive transition-colors"
+            aria-label="Report this result"
+            title="Report this result (NIP-56)"
+          >
+            <Flag className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
-    </Link>
+      </Link>
+
+      {result.nostrEvent && (
+        <ReportDialog
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          target={result.nostrEvent.id}
+          targetTitle={result.title}
+        />
+      )}
+    </>
   );
 }
 
 /* ─── External result (web index, community) ─── */
 function ExternalResultCard({ result, className }: { result: SearchResult; className?: string }) {
+  const [reportOpen, setReportOpen] = useState(false);
+
   return (
-    <a
-      href={result.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cn('block group', className)}
-    >
+    <>
+      <a
+        href={result.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn('block group', className)}
+      >
       <div className="p-4 rounded-xl border border-border/50 bg-card hover:border-primary/30 hover:bg-card/80 transition-all duration-200">
         {/* URL line */}
         <div className="flex items-center gap-2 mb-1.5">
@@ -162,16 +191,33 @@ function ExternalResultCard({ result, className }: { result: SearchResult; class
           </p>
         )}
 
-        {/* Footer: author, timestamp, tags */}
+        {/* Footer: author, timestamp, tags, report */}
         <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground/60 flex-wrap">
           {result.author && <span>by {result.author}</span>}
           {result.timestamp && <span>{timeAgo(result.timestamp)}</span>}
           {result.tags && result.tags.length > 0 && (
             <span className="font-mono">{result.tags.join(' · ')}</span>
           )}
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setReportOpen(true); }}
+            className="ml-auto inline-flex items-center gap-1 text-muted-foreground/50 hover:text-destructive transition-colors"
+            aria-label="Report this result"
+            title="Report this result (NIP-56)"
+          >
+            <Flag className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
-    </a>
+      </a>
+
+      <ReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        target={result.nostrEvent?.id ?? result.url}
+        targetTitle={result.title}
+      />
+    </>
   );
 }
 

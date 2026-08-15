@@ -1,16 +1,20 @@
 # Uncaged Engine — Event Kinds & Protocol Reference
 
 Everything this template reads or writes on Nostr, in one file. The engine
-uses standard NIPs wherever they exist and defines exactly two application
+uses standard NIPs wherever they exist and defines a handful of application
 schemas of its own:
 
 | Schema | Kind | Type | Defined in |
 |--------|------|------|------------|
 | Web Index Observation (SIP-01) | **39697** | addressable | [docs/SIP-01.md](docs/SIP-01.md) |
 | Community Submission | **30078** | addressable (NIP-78) | this file, §2 |
+| Moderation Label | **1985** | regular (NIP-32) | this file, §3 |
+| Abuse Report | **1984** | regular (NIP-56) | this file, §4 |
+| Team Role List | **30078** | addressable (NIP-78) | this file, §5 |
+| Un-hide (retract a label) | **5** | regular (NIP-09) | this file, §3 |
+| Engine-AI admin auth | **27235** | regular (NIP-98-flavored) | this file, §6 |
 
-All published events carry a NIP-31 `alt` tag with a human-readable
-description.
+All published events carry an `alt` tag with a human-readable description.
 
 ---
 
@@ -23,9 +27,10 @@ observed this web page at this time, and here is its public metadata."*
 - **Written by** the index publisher (`src/lib/indexPublisher.ts`) using the
   per-device indexer identity (`src/lib/indexerIdentity.ts`) — **never** the
   user's personal key, and **never** containing the search query. Called by
-  the auto-indexer (`src/hooks/useSearchIndexer.ts`) for fresh web results,
-  and by the Submit dialog (`src/components/SubmitToIndex.tsx`) for http(s)
-  community submissions.
+  the auto-indexer (`src/hooks/useSearchIndexer.ts`) for web pages discovered
+  during search (file-metadata URLs, links cited by Nostr content, and any
+  external-provider results), and by the Submit dialog
+  (`src/components/SubmitToIndex.tsx`) for http(s) community submissions.
 - **Read by** the Web Index provider (`src/lib/providers/web-index.ts`),
   which groups observations by `d` tag and ranks by independent indexer
   count + recency.
@@ -129,7 +134,91 @@ key**, so curation is attributable and spam is author-filterable.
 
 ---
 
-## 3. Standard kinds searched (read-only)
+## 3. Moderation Labels — kind 1985 (NIP-32)
+
+Team-signed result filtering. Hiding a result publishes a label; every
+client filters its result lists against labels from **trusted pubkeys only**
+(owner + role lists — the author filter is the trust boundary). Un-hiding
+publishes a NIP-09 deletion (`kind 5`, `e` tag = the label event id).
+
+```json
+{
+  "kind": 1985,
+  "content": "",
+  "tags": [
+    ["L", "uncaged.moderation"],
+    ["l", "hidden", "uncaged.moderation"],
+    ["u", "<normalized-url>"],
+    ["alt", "Uncaged Engine moderation: hidden <url>"]
+  ]
+}
+```
+
+Targets: `u` (a SIP-01-normalized URL) or `e` (a 64-hex Nostr event id).
+Implemented in `src/lib/moderation.ts`; applied to every search in
+`src/hooks/useProviderSearch.ts`.
+
+## 4. Abuse Reports — kind 1984 (NIP-56)
+
+Filed from any result card's flag button (`src/components/ReportDialog.tsx`),
+signed by the reporter's own key (attributable, Sybil-resistant). Self-labeled
+so moderators can filter the inbox by namespace:
+
+```json
+{
+  "kind": 1984,
+  "content": "<free-text details>",
+  "tags": [
+    ["r", "<url>", "<type>"],
+    ["L", "uncaged.abuse"],
+    ["l", "<type>", "uncaged.abuse"],
+    ["alt", "Abuse report (<type>)"]
+  ]
+}
+```
+
+The target tag follows NIP-56: `r` for URLs, `e` for events, `p` for
+profiles, `a` for addressable events (builders in `src/lib/reports.ts`).
+Types: `illegal`, `malware`, `spam`, `nudity`, `profanity`, `impersonation`,
+`other`. The Admin → Reports inbox turns a report into a moderation label
+in one click.
+
+## 5. Team Role Lists — kind 30078 (NIP-78)
+
+Owner-managed team rosters, resolved live by every client. Content is a JSON
+array of hex pubkeys; readers trust the **owner's signature only** — the
+d-tag alone is not a trust boundary (`authors: [OWNER_PUBKEY]` filter).
+
+```json
+{
+  "kind": 30078,
+  "content": "[\"<admin-pubkey-hex>\", …]",
+  "tags": [
+    ["d", "uncaged:admin-roles"],
+    ["t", "uncaged-roles"],
+    ["alt", "Uncaged Engine admin list"]
+  ]
+}
+```
+
+Two lists exist: `uncaged:admin-roles` and `uncaged:mod-roles`. Managed in
+Admin → Roles (`src/pages/Admin.tsx`); resolved in `src/hooks/useAdminAccess.ts`.
+
+## 6. Engine-AI admin auth — kind 27235 (NIP-98-flavored)
+
+The Admin → AI tab manages the engine-provided AI tier without accounts or
+passwords: each config write is a signed kind 27235 event (content = the
+JSON action, tags `u` + `method`), base64-encoded into the proxy's
+`Authorization: Nostr <…>` header. The worker verifies the Schnorr
+signature, the owner pubkey, a 5-minute freshness window, and the URL/method
+binding (`src/lib/ai/engineProxy.ts` → `verifyAdminAuth`; client side:
+`src/lib/ai/engineAdmin.ts`). The AI key itself only travels this one
+authenticated path.
+
+**Note:** the AI answer layer writes nothing to Nostr — answers are
+ephemeral and never indexed into SIP-01.
+
+## 7. Standard kinds searched (read-only)
 
 The Nostr provider (`src/lib/providers/nostr.ts`) issues **NIP-50** `search`
 filters against the search relay pool:
@@ -152,20 +241,24 @@ by `src/pages/NIP19Page.tsx`.
 
 ---
 
-## 4. Other NIPs in play
+## 8. Other NIPs in play
 
 | NIP | Kind / feature | Where |
 |-----|----------------|-------|
 | NIP-65 | **10002** relay list metadata — synced on login, published on edit | `src/components/NostrSync.tsx`, `src/components/RelayListManager.tsx` |
 | NIP-19 | bech32 identifiers — `npub` `note` `nevent` `naddr` `nprofile` all route at `/:nip19` | `src/pages/NIP19Page.tsx` |
-| NIP-31 | `alt` tags on every published event | `webIndex.ts`, `communityIndex.ts` |
+| `alt` convention (NIP-31 origin) | `alt` tags on every published event | `webIndex.ts`, `communityIndex.ts`, `moderation.ts`, `reports.ts` |
+| NIP-32 | **1985** moderation labels (`L`/`l` namespace tags) | `src/lib/moderation.ts` |
+| NIP-56 | **1984** abuse reports | `src/lib/reports.ts` |
+| NIP-09 | **5** deletion requests (un-hide) | `src/lib/moderation.ts` |
 | NIP-07 | browser extension signing | `src/components/auth/` |
 | NIP-46 | remote signer (nostrconnect / bunker) | `src/components/auth/` |
 | NIP-42 | relay AUTH (signed 22242 challenge responses) | `src/components/NostrProvider.tsx` |
+| NIP-98 | flavor of the engine-AI admin auth (kind 27235, signed URL+method binding) | `src/lib/ai/engineProxy.ts` |
 
 ---
 
-## 5. Trust model
+## 9. Trust model
 
 - **Index observations (39697):** trusted *structurally* — any indexer pubkey
   is accepted; events are self-signed statements about public metadata and
@@ -178,3 +271,9 @@ by `src/pages/NIP19Page.tsx`.
 - **Searched content (0/1/1063/30023/30818):** public UGC — no author
   filtering, rendered with React escaping; event-sourced URLs pass
   `sanitizeUrl()` (https/http only) before reaching the DOM.
+- **Moderation (1985/5) and roles (30078):** trusted *by author* — labels
+  count only from the owner + owner-listed team keys; role lists only from
+  the owner. `OWNER_PUBKEY` in `src/lib/moderation.ts` is the trust root —
+  forks must replace it.
+- **Reports (1984):** trusted *socially* — attributable to the reporter;
+  they inform the team but never filter anything by themselves.

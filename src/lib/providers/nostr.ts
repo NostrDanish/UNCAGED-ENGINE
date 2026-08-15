@@ -131,16 +131,44 @@ function eventToSearchResult(event: NostrEvent, query: string): SearchResult {
     result.snippet = event.content || getTag(event, 'summary') || '';
     result.kind = 'File';
     const fileUrl = getTag(event, 'url');
-    if (fileUrl) result.domain = extractDomain(fileUrl);
+    if (fileUrl) {
+      // NIP-94 files reference a real web resource — carry it through so the
+      // auto-indexer can publish it to the SIP-01 web index.
+      const sanitized = sanitizeUrl(fileUrl);
+      if (sanitized) {
+        result.webUrl = sanitized;
+        result.domain = extractDomain(sanitized);
+      }
+    }
     result.score = 98;
   } else {
     // Note (kind 1) or other
     result.title = truncate(event.content, 120);
     result.snippet = extractRelevantSnippet(event.content, query);
     result.kind = event.kind === 1 ? undefined : `Kind ${event.kind}`;
+
+    // A web link cited by Nostr content is a discovery signal — carry the
+    // first valid http(s) link through for the auto-indexer.
+    const cited = firstCitedUrl(event.content);
+    if (cited) result.webUrl = cited;
   }
 
   return result;
+}
+
+/**
+ * Extract the first http(s) URL from free text (a note's cited link).
+ * Sanitized through the http/https allowlist; trailing punctuation stripped.
+ */
+function firstCitedUrl(content: string): string | undefined {
+  const matches = content.match(/https?:\/\/[^\s<>"')]+/g);
+  if (!matches) return undefined;
+  for (const raw of matches) {
+    const cleaned = raw.replace(/[.,;:!?\]]+$/, '');
+    const sanitized = sanitizeUrl(cleaned);
+    if (sanitized) return sanitized;
+  }
+  return undefined;
 }
 
 function getTag(event: NostrEvent, name: string): string | undefined {
