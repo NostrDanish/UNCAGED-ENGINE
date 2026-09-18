@@ -21,7 +21,7 @@
  *
  * Ported from 0xPresearchstr's Team Console.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -30,7 +30,7 @@ import {
   ShieldCheck, BarChart3, Flag, EyeOff, SearchCheck,
   FileText, Inbox, Globe, Zap, Clock, ExternalLink,
   Loader2, Eye, RotateCcw, Users, Crown, UserCog, Plus, Trash2,
-  Sparkles, Lock, CheckCircle2, XCircle, KeyRound, Link2,
+  Sparkles, Lock, CheckCircle2, XCircle, KeyRound, Link2, Tag, Handshake,
 } from 'lucide-react';
 
 import { Layout } from '@/components/Layout';
@@ -55,6 +55,12 @@ import { useEngineAIStatus } from '@/hooks/useEngineAIStatus';
 import { sendEngineAIAction, testEngineAI } from '@/lib/ai/engineAdmin';
 import { AI_PROVIDERS, getAIProvider } from '@/lib/ai/registry';
 import { useRecentIndexedDocs, useCommunitySubmissions } from '@/hooks/useIndexStats';
+import { useAffiliateRules, useAffiliateActions } from '@/hooks/useAffiliates';
+import {
+  applyAffiliateRules, isValidAffiliateRule, normalizeHostInput, paramsFromUrl, type AffiliateRule,
+} from '@/lib/affiliates';
+import { useReferralConfig, useReferralConfigActions } from '@/hooks/useReferrals';
+import { DEFAULT_REFERRAL_CONFIG, type ReferralConfig } from '@/lib/referrals';
 import {
   useAbuseReports,
   useHiddenTargets,
@@ -148,7 +154,7 @@ export default function Admin() {
 /* ─── Tabs ─── */
 
 function AdminTabs() {
-  const { canManageRoles } = useAdminAccess();
+  const { canManageRoles, isAdmin } = useAdminAccess();
 
   return (
     <Tabs defaultValue="stats">
@@ -158,6 +164,12 @@ function AdminTabs() {
         <TabsTrigger value="moderation" className="gap-1.5"><EyeOff className="w-3.5 h-3.5" />Moderation</TabsTrigger>
         <TabsTrigger value="filter" className="gap-1.5"><SearchCheck className="w-3.5 h-3.5" />Filter test</TabsTrigger>
         <TabsTrigger value="ai" className="gap-1.5"><Sparkles className="w-3.5 h-3.5" />AI</TabsTrigger>
+        {isAdmin && (
+          <TabsTrigger value="affiliates" className="gap-1.5"><Tag className="w-3.5 h-3.5" />Affiliates</TabsTrigger>
+        )}
+        {isAdmin && (
+          <TabsTrigger value="referrals" className="gap-1.5"><Handshake className="w-3.5 h-3.5" />Invites</TabsTrigger>
+        )}
         {canManageRoles && (
           <TabsTrigger value="roles" className="gap-1.5"><Users className="w-3.5 h-3.5" />Roles</TabsTrigger>
         )}
@@ -167,6 +179,8 @@ function AdminTabs() {
       <TabsContent value="moderation"><ModerationTab /></TabsContent>
       <TabsContent value="filter"><FilterTab /></TabsContent>
       <TabsContent value="ai"><AITab /></TabsContent>
+      {isAdmin && <TabsContent value="affiliates"><AffiliatesTab /></TabsContent>}
+      {isAdmin && <TabsContent value="referrals"><ReferralsTab /></TabsContent>}
       {canManageRoles && <TabsContent value="roles"><RolesTab /></TabsContent>}
     </Tabs>
   );
@@ -599,8 +613,7 @@ function AITab() {
             The engine-AI proxy (<code className="font-mono text-xs">/api/ai</code>) isn't reachable on
             this deployment. Engine-provided AI requires deploying a thin worker shell over
             <code className="font-mono text-xs"> src/lib/ai/engineProxy.ts</code> (see README → AI answers).
-            Users can still add their own keys in Settings → AI, and the built-in free tier
-            works everywhere.
+            Users can still add their own keys in Settings → AI.
           </p>
         </CardContent>
       </Card>
@@ -652,7 +665,7 @@ function AITab() {
             </div>
           ) : (
             <p className="text-xs text-muted-foreground leading-relaxed">
-              No engine key configured. Users fall back to their own keys (Settings → AI) or the built-in free tier.
+              No engine key configured. Users fall back to their own keys (Settings → AI).
               {isOwner
                 ? ' Configure one below, or set AI_API_KEY as a worker secret and redeploy.'
                 : ' Only the owner can configure engine AI.'}
@@ -771,7 +784,7 @@ function AITab() {
                       <AlertDialogTitle>Clear engine-provided AI?</AlertDialogTitle>
                       <AlertDialogDescription>
                         The server-side key is deleted from runtime storage. Users without
-                        their own key immediately fall back to the built-in free tier.
+                        their own key immediately lose engine-provided AI answers.
                         Env-var config, if any, still applies after redeploy.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -986,6 +999,454 @@ function RolesTab() {
       <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
         Admins and moderators see this console in their account menu and can hide/unhide
         results. Only the owner manages roles.
+      </p>
+    </div>
+  );
+}
+
+/* ─── Affiliates (owner/admin-managed link tagging) ─── */
+
+function AffiliatesTab() {
+  const { rules, isLoading } = useAffiliateRules();
+  const { updateRules } = useAffiliateActions();
+  const { toast } = useToast();
+
+  // Local draft — null until the published rules have loaded.
+  const [draft, setDraft] = useState<AffiliateRule[] | null>(null);
+  const [host, setHost] = useState('');
+  const [mode, setMode] = useState<AffiliateRule['mode']>('param');
+  // Param mode: a row editor (eBay needs 5 params, Amazon needs 1).
+  const [paramRows, setParamRows] = useState<{ k: string; v: string }[]>([{ k: '', v: '' }]);
+  const [importUrl, setImportUrl] = useState('');
+  const [target, setTarget] = useState('');
+  const [testUrl, setTestUrl] = useState('');
+  const [pending, setPending] = useState(false);
+
+  // One-time sync when the published rules land from the relays.
+  useEffect(() => {
+    if (draft === null && !isLoading) setDraft(rules);
+  }, [draft, isLoading, rules]);
+
+  const loaded = draft !== null;
+  const current = draft ?? [];
+  const dirty = loaded && JSON.stringify(current) !== JSON.stringify(rules);
+
+  /** Paste a full affiliate URL → auto-fill host + every query param. */
+  const handleImport = () => {
+    const parsed = paramsFromUrl(importUrl);
+    if (!parsed) {
+      toast({ title: 'Not a URL', description: 'Paste a full affiliate link, e.g. https://www.ebay.com/itm/…?mkcid=1&campid=…', variant: 'destructive' });
+      return;
+    }
+    setHost(parsed.host);
+    setMode('param');
+    const rows = Object.entries(parsed.params).map(([k, v]) => ({ k, v }));
+    setParamRows(rows.length > 0 ? rows : [{ k: '', v: '' }]);
+    setImportUrl('');
+  };
+
+  const handleAdd = () => {
+    const params = mode === 'param'
+      ? Object.fromEntries(
+          paramRows
+            .map((r) => ({ k: r.k.trim(), v: r.v.trim() }))
+            .filter((r) => r.k && r.v)
+            .map((r) => [r.k, r.v]),
+        )
+      : undefined;
+
+    const rule: AffiliateRule = {
+      // Forgiving: pasting a full URL into the host field just works.
+      host: normalizeHostInput(host),
+      mode,
+      params,
+      target: mode === 'redirect' ? target.trim() : undefined,
+    };
+    if (!isValidAffiliateRule(rule)) {
+      toast({
+        title: 'Invalid rule',
+        description: mode === 'param'
+          ? 'Need a valid host plus 1–10 parameters (names: letters/numbers/_/-; values: no spaces, &, ?, #).'
+          : 'Referral link must be a full https URL, e.g. https://ppq.ai/invite/your-code.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (current.some((r) => r.host === rule.host)) {
+      toast({ title: 'Duplicate host', description: 'That host already has a rule — remove it first.', variant: 'destructive' });
+      return;
+    }
+    setDraft([...current, rule]);
+    setHost('');
+    setParamRows([{ k: '', v: '' }]);
+    setTarget('');
+  };
+
+  const handlePublish = async () => {
+    setPending(true);
+    try {
+      await updateRules(current);
+      toast({ title: 'Affiliate rules published', description: `${current.length} rule(s) live for all users within a minute.` });
+    } catch (err) {
+      toast({ title: 'Publish failed', description: err instanceof Error ? err.message : 'Publish failed', variant: 'destructive' });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const taggedExample = testUrl.trim() ? applyAffiliateRules(testUrl.trim(), current) : '';
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-primary/20">
+        <CardContent className="py-4 space-y-3">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            When a result URL matches a rule&apos;s host, it is tagged automatically —
+            for every user. Two shapes of program are supported:
+          </p>
+          <ul className="text-xs text-muted-foreground leading-relaxed list-disc pl-4 space-y-1">
+            <li>
+              <span className="font-medium text-foreground">Query params</span> — the page URL
+              gains your parameter(s): <span className="font-mono">amazon.ca</span> +{' '}
+              <span className="font-mono">tag=your-code-21</span>, or eBay&apos;s five-parameter
+              EPN set (<span className="font-mono">mkcid/mkrid/siteid/campid/customid</span>) in one
+              rule. Existing params with the same names are replaced with ours. Paste a full
+              affiliate URL into Auto-fill to skip the typing.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Referral link</span> — the click goes to
+              your invite URL instead (cookie-based programs):{' '}
+              <span className="font-mono">ppq.ai</span> → <span className="font-mono">https://ppq.ai/invite/your-code</span>.
+              The token <span className="font-mono">{'{url}'}</span> in the link is replaced with the
+              original (encoded) URL for prefix-style programs.
+            </li>
+          </ul>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            The rule list is one owner/admin-signed NIP-78 event (kind 30078,{' '}
+            <span className="font-mono">uncaged:affiliate-rules</span>) — public by design,
+            since affiliate codes are visible in tagged URLs anyway. Subdomains match
+            (a rule for <span className="font-mono">amazon.ca</span> covers{' '}
+            <span className="font-mono">www.amazon.ca</span>).
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Add rule */}
+      <Card className="border-primary/20">
+        <CardContent className="py-4 space-y-3">
+          <div className="flex gap-2 flex-wrap items-center">
+            <Input
+              placeholder="Host (amazon.ca — or paste a URL)"
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+              className="font-mono text-sm flex-1 min-w-36"
+              aria-label="Host"
+            />
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as AffiliateRule['mode'])}
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+              aria-label="Rule type"
+            >
+              <option value="param">Query param</option>
+              <option value="redirect">Referral link</option>
+            </select>
+          </div>
+          {mode === 'param' ? (
+            <div className="space-y-2">
+              {/* Auto-fill from a pasted affiliate URL (eBay EPN et al.) */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Paste a full affiliate URL to auto-fill…"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleImport()}
+                  className="font-mono text-xs"
+                  aria-label="Import from affiliate URL"
+                />
+                <Button variant="outline" size="sm" onClick={handleImport} disabled={!importUrl.trim()} className="shrink-0">
+                  Auto-fill
+                </Button>
+              </div>
+              {paramRows.map((row, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <Input
+                    placeholder={i === 0 ? 'Param (tag)' : 'Param'}
+                    value={row.k}
+                    onChange={(e) => setParamRows(paramRows.map((r, j) => (j === i ? { ...r, k: e.target.value } : r)))}
+                    className="font-mono text-sm w-32"
+                    aria-label={`Parameter ${i + 1} name`}
+                  />
+                  <Input
+                    placeholder={i === 0 ? 'Code (your-code-21)' : 'Value'}
+                    value={row.v}
+                    onChange={(e) => setParamRows(paramRows.map((r, j) => (j === i ? { ...r, v: e.target.value } : r)))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                    className="font-mono text-sm flex-1 min-w-28"
+                    aria-label={`Parameter ${i + 1} value`}
+                  />
+                  {paramRows.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setParamRows(paramRows.filter((_, j) => j !== i))}
+                      className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0"
+                      aria-label={`Remove parameter ${i + 1}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {paramRows.length < 10 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setParamRows([...paramRows, { k: '', v: '' }])}
+                  className="text-muted-foreground"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Add parameter
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Input
+              placeholder="Referral link (https://ppq.ai/invite/your-code)"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+              className="font-mono text-sm"
+              aria-label="Referral link"
+            />
+          )}
+          <div>
+            <Button
+              onClick={handleAdd}
+              disabled={!host.trim() || (mode === 'param' ? !paramRows.some((r) => r.k.trim() && r.v.trim()) : !target.trim())}
+              className="shrink-0"
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Add rule
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Current rules */}
+      {!loaded ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : current.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            No affiliate rules yet. Add one above — e.g. host{' '}
+            <span className="font-mono">amazon.ca</span> with param{' '}
+            <span className="font-mono">tag</span> + your Associates code, or host{' '}
+            <span className="font-mono">ppq.ai</span> with your invite link.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {current.map((rule) => (
+            <div
+              key={rule.host}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg border border-border/60 bg-card"
+            >
+              <Tag className="w-4 h-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="font-mono text-sm truncate">{rule.host}</p>
+                <p className="font-mono text-[11px] text-muted-foreground truncate">
+                  {rule.mode === 'redirect'
+                    ? `→ ${rule.target}`
+                    : `?${Object.entries(rule.params ?? {}).map(([k, v]) => `${k}=${v}`).join('&')}`}
+                </p>
+              </div>
+              <Badge variant="outline" className="text-[10px] shrink-0 border-border text-muted-foreground">
+                {rule.mode === 'redirect' ? 'Referral link' : 'Query param'}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDraft(current.filter((r) => r.host !== rule.host))}
+                className="text-muted-foreground hover:text-destructive shrink-0"
+                aria-label={`Remove rule for ${rule.host}`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Test + publish */}
+      <Card>
+        <CardContent className="py-4 space-y-3">
+          <div>
+            <p className="text-xs font-medium mb-1.5">Test the rules</p>
+            <Input
+              placeholder="https://www.amazon.ca/some-product"
+              value={testUrl}
+              onChange={(e) => setTestUrl(e.target.value)}
+              className="font-mono text-sm"
+              aria-label="Test URL"
+            />
+            {taggedExample && (
+              <p className="font-mono text-[11px] text-primary break-all mt-2">{taggedExample}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Button onClick={() => void handlePublish()} disabled={pending || !dirty}>
+              {pending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1.5" />}
+              Publish rules
+            </Button>
+            {dirty && (
+              <Button variant="ghost" size="sm" onClick={() => setDraft(rules)}>
+                Discard changes
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+        Owner and admins can edit; the latest signed version wins and takes effect for
+        all users as soon as relays propagate the event. If an admin is removed from the
+        Roles tab, their version stops being trusted immediately. Remember affiliate-program
+        disclosure duties (e.g. Amazon Associates requires a visible earnings disclosure
+        on your site).
+      </p>
+    </div>
+  );
+}
+
+/* ─── Referrals (Invite config) ─── */
+
+function ReferralsTab() {
+  const { config, isLoading } = useReferralConfig();
+  const { updateConfig } = useReferralConfigActions();
+  const { toast } = useToast();
+
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [windowDays, setWindowDays] = useState('');
+  const [pending, setPending] = useState(false);
+
+  // One-time sync when the published config lands from the relays.
+  useEffect(() => {
+    if (enabled === null && !isLoading) {
+      setEnabled(config.enabled);
+      setWindowDays(String(config.attributionWindowDays));
+    }
+  }, [enabled, isLoading, config]);
+
+  const loaded = enabled !== null;
+  const windowNum = Math.floor(Number(windowDays));
+  const windowValid = Number.isFinite(windowNum) && windowNum > 0 && windowNum <= 3650;
+  const dirty = loaded && (enabled !== config.enabled || (windowValid && windowNum !== config.attributionWindowDays));
+
+  const handlePublish = async () => {
+    if (enabled === null || !windowValid) return;
+    setPending(true);
+    try {
+      const next: ReferralConfig = { enabled, attributionWindowDays: windowNum };
+      await updateConfig(next);
+      toast({ title: 'Referral settings published', description: 'Live for all users within a minute.' });
+    } catch (err) {
+      toast({ title: 'Publish failed', description: err instanceof Error ? err.message : 'Publish failed', variant: 'destructive' });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-primary/20">
+        <CardContent className="py-4 space-y-3">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Invite configuration lives in one owner/admin-signed NIP-78 event
+            (kind 30078, <span className="font-mono">uncaged:referral-config</span>).
+            It only holds program-wide settings — referral RELATIONSHIPS are never
+            stored in it (each one is a per-device attribution ping, kind 34967).
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Identity is the inviter&apos;s <span className="font-mono">npub</span> — never a
+            username. Attribution is first-touch within the window, persisted on the
+            visitor&apos;s device, and self-referrals are rejected. An invite link grants
+            no authority of any kind.
+          </p>
+        </CardContent>
+      </Card>
+
+      {!loaded ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="py-4 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Invite program enabled</p>
+                <p className="text-xs text-muted-foreground">
+                  When off, <span className="font-mono">?ref=</span> links are ignored (no capture, no pings).
+                </p>
+              </div>
+              <Switch
+                checked={enabled}
+                onCheckedChange={setEnabled}
+                aria-label="Invite program enabled"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-sm font-medium">Attribution window (days)</p>
+                <p className="text-xs text-muted-foreground">
+                  First-touch attribution lasts this long; after it expires, a new invite link may re-attribute.
+                </p>
+              </div>
+              <Input
+                type="number"
+                min={1}
+                max={3650}
+                value={windowDays}
+                onChange={(e) => setWindowDays(e.target.value)}
+                className="w-24 font-mono text-sm"
+                aria-label="Attribution window in days"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button onClick={() => void handlePublish()} disabled={pending || !dirty || !windowValid}>
+                {pending ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-1.5" />}
+                Publish settings
+              </Button>
+              {dirty && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEnabled(config.enabled);
+                    setWindowDays(String(config.attributionWindowDays));
+                  }}
+                >
+                  Discard changes
+                </Button>
+              )}
+            </div>
+            {!windowValid && (
+              <p className="text-[11px] text-destructive">Window must be 1–3650 days.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+        Defaults when nothing is published: enabled, {DEFAULT_REFERRAL_CONFIG.attributionWindowDays}-day
+        window. Owner and admins can edit; the latest signed version wins.
       </p>
     </div>
   );

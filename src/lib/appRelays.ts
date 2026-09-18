@@ -1,9 +1,31 @@
 import type { RelayMetadata } from '@/contexts/AppContext';
+import { getDiscoveredIndexRelays, getDiscoveredSearchRelays } from '@/lib/relayDiscovery';
 
 /**
- * App default relays. Used as the initial `relayMetadata` for new users and as
- * a fallback when the user has no NIP-65 relay list configured (e.g. during
- * nostrconnect handshakes before any user relays have been loaded).
+ * Relay layout model (conceptual map — the concrete pools below):
+ *
+ *   indexRead    — where SIP-01 observations + community submissions are
+ *                  read from, and where NIP-50 content search fans out
+ *                  (SEARCH_RELAYS + user customs + NIP-11-verified
+ *                  discovered relays).
+ *   indexWrite   — extra public write relays that index observations are
+ *                  ALSO published to for propagation (INDEX_WRITE_RELAYS).
+ *   control      — where moderation labels, role lists, reports, and
+ *                  referral/affiliate control events live
+ *                  (getModerationRelayUrls(): the index pool + the owner's
+ *                  NIP-65 defaults).
+ *   fallback     — the user's NIP-65 relay list (APP_RELAYS defaults) —
+ *                  login/profile/submission transport, never search fan-out.
+ *
+ * Every relay in every pool has a reason for being there; user overrides
+ * (custom adds + removable defaults) apply per-pool via localStorage.
+ */
+
+/**
+ * App default relays (the fallback/control layer). Used as the initial
+ * `relayMetadata` for new users and as a fallback when the user has no
+ * NIP-65 relay list configured (e.g. during nostrconnect handshakes before
+ * any user relays have been loaded).
  *
  * These are only the INITIAL value — users edit their NIP-65 list freely in
  * Settings → Your Relays (synced as kind 10002 when logged in).
@@ -104,9 +126,14 @@ export function getCustomSearchRelays(): string[] {
   return readList(LS_CUSTOM_SEARCH_RELAYS);
 }
 
-/** Default relays the user has removed. */
+/** Raw removed relay URLs (defaults AND hidden discovered relays). */
+function getRawRemovedSearchRelays(): string[] {
+  return readList(LS_REMOVED_SEARCH_RELAYS);
+}
+
+/** Default relays the user has removed (drives the "Restore defaults" affordance). */
 export function getRemovedSearchRelays(): string[] {
-  return readList(LS_REMOVED_SEARCH_RELAYS).filter(isDefaultSearchRelay);
+  return getRawRemovedSearchRelays().filter(isDefaultSearchRelay);
 }
 
 /**
@@ -133,30 +160,38 @@ export function addSearchRelay(input: string): { url: string; origin: 'default' 
   return { url: normalized, origin: 'custom' };
 }
 
-/** Remove a relay from the pool — works for defaults and customs alike. */
+/** Remove a relay from the pool — works for defaults, customs, and discovered relays alike. */
 export function removeSearchRelay(url: string): void {
   if (isDefaultSearchRelay(url)) {
-    const removed = getRemovedSearchRelays();
+    const removed = getRawRemovedSearchRelays();
     if (!removed.includes(url)) writeList(LS_REMOVED_SEARCH_RELAYS, [...removed, url]);
     return;
   }
-  writeList(LS_CUSTOM_SEARCH_RELAYS, readList(LS_CUSTOM_SEARCH_RELAYS).filter((u) => u !== url));
+  if (readList(LS_CUSTOM_SEARCH_RELAYS).includes(url)) {
+    writeList(LS_CUSTOM_SEARCH_RELAYS, readList(LS_CUSTOM_SEARCH_RELAYS).filter((u) => u !== url));
+    return;
+  }
+  // Discovered relay — hide it via the removed list.
+  const removed = getRawRemovedSearchRelays();
+  if (!removed.includes(url)) writeList(LS_REMOVED_SEARCH_RELAYS, [...removed, url]);
 }
 
-/** Restore every removed default relay (customs are kept). */
+/** Restore every removed DEFAULT relay (customs + hidden discovered relays are kept). */
 export function restoreDefaultSearchRelays(): void {
-  writeList(LS_REMOVED_SEARCH_RELAYS, []);
+  writeList(LS_REMOVED_SEARCH_RELAYS, getRawRemovedSearchRelays().filter((u) => !isDefaultSearchRelay(u)));
 }
 
 /**
- * The effective search relay pool: default relays (minus user removals)
- * first, then the user's custom relays (deduped).
+ * The effective search relay pool (indexRead): default relays (minus user
+ * removals), then the user's custom relays, then NIP-11-verified discovered
+ * relays (deduped). Discovery is additive only — the defaults keep working
+ * with an empty discovery cache.
  */
 export function getSearchRelayUrls(): string[] {
-  const removed = new Set(getRemovedSearchRelays());
+  const removed = new Set(getRawRemovedSearchRelays());
   const seen = new Set<string>();
   const pool: string[] = [];
-  for (const url of [...SEARCH_RELAYS, ...readList(LS_CUSTOM_SEARCH_RELAYS)]) {
+  for (const url of [...SEARCH_RELAYS, ...readList(LS_CUSTOM_SEARCH_RELAYS), ...getDiscoveredSearchRelays()]) {
     if (removed.has(url) || seen.has(url)) continue;
     seen.add(url);
     pool.push(url);
@@ -183,13 +218,14 @@ export const INDEX_WRITE_RELAYS = [
 /**
  * Relays that index observations are published to: the search pool first
  * (so the Web Index provider sees fresh observations immediately and the
- * SIP-01 index network gets them at the door), then the write relays (so
- * they replicate across the network). Deduped.
+ * SIP-01 index network gets them at the door), then NIP-11-verified
+ * SIP-01-capable discovered relays, then the write relays (so they
+ * replicate across the network). Deduped.
  */
 export function getIndexPublishRelays(): string[] {
   const seen = new Set<string>();
   const pool: string[] = [];
-  for (const url of [...getSearchRelayUrls(), ...INDEX_WRITE_RELAYS]) {
+  for (const url of [...getSearchRelayUrls(), ...getDiscoveredIndexRelays(), ...INDEX_WRITE_RELAYS]) {
     if (!seen.has(url)) {
       seen.add(url);
       pool.push(url);

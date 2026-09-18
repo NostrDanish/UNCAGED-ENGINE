@@ -29,9 +29,18 @@ to Nostr relays over WebSocket.
 - **Community index (kind 30078)** — any logged-in Nostr user can submit
   links. Signed, attributable, relay-filterable.
 - **AI answers (optional)** — an evidence-cited AI layer over the results:
-  BYOK (any OpenAI-compatible API), engine-provided tier (operator key via
-  a same-origin proxy), and a built-in free tier. Off by default; answers
-  are ephemeral and never indexed.
+  BYOK (any OpenAI-compatible API) or an engine-provided tier (operator key
+  via a same-origin proxy). Off by default; answers are ephemeral and never
+  indexed. No provider key ever ships in the bundle.
+- **Reference system** — invite links (`?ref=npub…`) with first-touch
+  attribution, owner-managed affiliate URL tagging (param + redirect rules),
+  and pseudonymous click attribution — all in this app's `uncaged` namespace.
+- **Structured queries** — `AND`/`OR`/`NOT`, `"exact phrases"`, and
+  `site:` `domain:` `title:` `type:` `lang:` `tag:` `before:` `after:`
+  filters, parsed safely (never throws) and enforced client-side.
+- **Relay discovery** — finds extra NIP-50 / SIP-01 relays automatically:
+  NIP-66 announcements → NIP-11 verification → verified relays join the
+  pool. Toggle in Settings → Search Relays.
 - **Moderation & abuse reports** — team-signed NIP-32 labels (kind 1985)
   hide results for every user; NIP-56 reports (kind 1984) from any result
   card land in the admin inbox; un-hiding is a NIP-09 deletion.
@@ -346,13 +355,20 @@ are ephemeral — never indexed into SIP-01.
 ```
 User's own key (Settings → AI)   ← always wins; stored only in their browser
         ↓
+Keyless provider (e.g. Ollama)   ← local models need no key
+        ↓
 Engine-provided AI (/api/ai)     ← operator's key, server-side only (worker)
         ↓
-Built-in free tier               ← shared rate-limited PPQ key, locked model,
-                                   public by design (ships in the bundle)
-        ↓
-AI unavailable                   ← only for forks that remove the built-in key
+AI unavailable
 ```
+
+**Secret rule (hard):** NO provider API key ships in this repository or the
+frontend bundle. The user's key stays in their browser's localStorage; the
+operator's key stays server-side in the deployment's secret store (worker
+env / KV). Provider credentials should ultimately live behind a
+signer/proxy service (0xSigner pattern): the browser only ever calls a
+same-origin, key-injecting proxy — never a provider directly with a shared
+credential.
 
 - **BYOK** — PPQ.ai, OpenRouter, OpenAI, Ollama (local, no key), or any
   custom OpenAI-compatible endpoint. Provider/endpoint/model unlock the
@@ -402,13 +418,79 @@ Two relay layers, both editable in Settings:
   Settings also includes a per-relay latency tester — the onion relay
   honestly shows as unreachable outside Tor.
 
-Index observations publish to the search pool plus `INDEX_WRITE_RELAYS`
-(ditto/primal/damus) for wider propagation — `getIndexPublishRelays()`.
+- **Relay discovery (NIP-66 + NIP-11)** — the app optionally finds extra
+  relays itself (`src/lib/relayDiscovery.ts`): NIP-66 relay announcements
+  (`kind 30166`, `#N: 50`) become candidates; every candidate's NIP-11
+  document is then VERIFIED before it joins the pool (NIP-50 search tier
+  when `supported_nips` includes 50; SIP-01 index tier when it advertises
+  the `uncaged_index` block — spec §15). Verified relays are cached 24h,
+  sorted by probe latency, capped, and removable like any other relay.
+  Toggle in Settings → Search Relays.
+
+Index observations publish to the search pool plus verified SIP-01
+discovered relays plus `INDEX_WRITE_RELAYS` (ditto/primal/damus) for wider
+propagation — `getIndexPublishRelays()`.
+
+The conceptual layout (documented in `src/lib/appRelays.ts`):
+
+```
+indexRead   — search pool (defaults + customs + discovered NIP-50/SIP-01)
+indexWrite  — INDEX_WRITE_RELAYS (propagation)
+control     — moderation/roles/reports/referral configs (moderation pool)
+fallback    — the user's NIP-65 relay list (APP_RELAYS defaults)
+```
 
 Change the defaults in `src/lib/appRelays.ts` (`APP_RELAYS` for the NIP-65
 defaults, `SEARCH_RELAYS` for the search pool).
 
-### 9. Make it yours — checklist
+### 9. Structured queries
+
+The search bar understands more than keywords (`src/lib/queryParser.ts` +
+`src/lib/queryEval.ts`):
+
+| Syntax | Meaning |
+|---|---|
+| `nostr privacy` | implicit AND |
+| `nostr AND privacy` / `OR` / `NOT` | explicit booleans (UPPERCASE only — "rock and roll" stays text) |
+| `-twitter` | NOT shorthand |
+| `"decentralized search"` | exact phrase (order-sensitive) |
+| `( … )` | grouping, precedence NOT > AND > OR |
+| `site:github.com` | host or subdomain of |
+| `domain:github.com` | exact host |
+| `title:nostr` | term in the document title |
+| `type:pdf` / `type:repository` | SIP-01 `type` (or `mime` tail) |
+| `lang:en` | ISO 639-1 document language |
+| `tag:nostr` | exact topic tag |
+| `before:2024` / `after:2026-01-01` | date boundary (published ?? observed) |
+
+The parser never throws — malformed input degrades gracefully. SIP-01-aware
+relays ALSO get the raw query as a NIP-50 hint (their server-side operators
+may answer better); the client-side evaluator enforces the same semantics on
+whatever comes back.
+
+### 10. The reference system (invites + affiliates)
+
+Two cooperating pieces, both in this app's `uncaged` namespace (never shared
+with other engines):
+
+- **Invites (`?ref=`)** — `/invite` gives any logged-in user a tracking
+  link. First-touch attribution (never overwritten inside the window),
+  self-referrals rejected, and a single addressable ping (kind 34967) per
+  referred device — signed by a dedicated per-device analytics key, NOT the
+  user's account and NOT the SIP-01 indexer identity. Partners see counts,
+  not people.
+- **Affiliate tagging** — owner/admins publish one signed kind 30078 rule
+  list (`uncaged:affiliate-rules`): host → param map (Amazon `tag=`,
+  eBay's 5-param EPN set) or host → redirect link (PPQ-style invite URLs,
+  with `{url}` substitution). Matching result links are tagged for every
+  user; referred-device clicks publish one pseudonymous kind 6079 event.
+  Admin → Affiliates has the full rule editor (auto-fill from a pasted
+  affiliate URL) + a live tester.
+
+Counts are public-by-design engagement metrics — settlement belongs to the
+affiliate networks' own reports.
+
+### 11. Make it yours — checklist
 
 - [ ] Rename "Uncaged Engine" in `src/components/Layout.tsx`,
       `src/pages/Index.tsx`, `index.html`, `public/manifest.webmanifest`
@@ -418,8 +500,8 @@ defaults, `SEARCH_RELAYS` for the search pool).
       (the admin console, roles, and moderation labels trust it)
 - [ ] Adjust default relays in `src/lib/appRelays.ts`
 - [ ] Pick your accent color in `src/index.css`
-- [ ] Empty `COMMUNITY_AI_KEY` in `src/lib/aiConfig.ts` if you don't want to
-      share the built-in free AI tier (BYOK + engine tier still work)
+- [ ] AI: no key ships in the bundle by design — users bring their own
+      (Settings → AI) or you deploy the engine-tier worker (Admin → AI)
 - [ ] If you fork the protocol: pick your own `d`-tag/`t`-tag namespaces in
       `src/lib/communityIndex.ts` and `src/lib/moderation.ts` (or keep
       `uncaged-*` to federate)
@@ -437,6 +519,9 @@ defaults, `SEARCH_RELAYS` for the search pool).
 | **1984** | NIP-56 abuse reports (result card flag → admin inbox) |
 | **5** | NIP-09 deletion (un-hide a result) |
 | **27235** | NIP-98-flavored engine-AI admin auth (signed config writes) |
+| **34967** | Referral pings (first-touch invite attribution, per-device key) |
+| **6079** | Affiliate click attribution (pseudonymous, per-device key) |
+| **NIP-66/11** | relay discovery: announcements → verified capability probing |
 | **0** | Profile metadata (search results + author cards) |
 | **1** | Notes (search results) |
 | **1063** | File metadata, NIP-94 (search results; their `url` feeds auto-indexing) |
@@ -474,8 +559,14 @@ src/
 │   ├── communityIndex.ts     ← submission schema (build + parse)
 │   ├── moderation.ts         ← NIP-32 labels, roles, trust root
 │   ├── reports.ts            ← NIP-56 abuse report builders
-│   ├── aiConfig.ts           ← AI tiers + credential precedence
+│   ├── referrals.ts          ← ?ref= attribution + click events (34967/6079)
+│   ├── affiliates.ts         ← owner-managed host→code tagging rules
+│   ├── appProfile.ts         ← UNCAGED identity + namespaces + permissions
+│   ├── relayDiscovery.ts     ← NIP-66 candidates → NIP-11 verification
+│   ├── aiConfig.ts           ← AI tiers + credential precedence (no bundled keys)
 │   ├── corsProxy.ts          ← proxied fetch with failover (AI calls)
+│   ├── queryParser.ts        ← structured queries (AND/OR/NOT/phrases/filters)
+│   ├── queryEval.ts          ← client-side AST evaluation over documents
 │   ├── queryClassify.ts      ← what KIND of query is this (AI gating)
 │   ├── contentType.ts        ← link type detection + URL allowlist
 │   ├── appRelays.ts          ← default relays + search relay pool
@@ -489,6 +580,8 @@ src/
 │   ├── useAIAnswer.ts        ← evidence pack → cited AI answer
 │   ├── useModeration.ts      ← hidden set, reports inbox, team actions
 │   ├── useAdminAccess.ts     ← role resolution (owner/admin/moderator)
+│   ├── useAffiliates.ts      ← affiliate rules (read + owner/admin write)
+│   ├── useReferrals.ts       ← referral config, click tracking, partner stats
 │   ├── useEngineAIStatus.ts  ← /api/ai status probe
 │   ├── useIndexStats.ts      ← admin stats counters
 │   ├── useSearchRelayPool.ts ← search relay pool + latency tester
@@ -500,13 +593,16 @@ src/
 │   ├── UnifiedResultCard.tsx ← one card for every result type (+ report flag)
 │   ├── AIAnswerCard.tsx      ← the synthesized answer with [n] citations
 │   ├── ReportDialog.tsx      ← NIP-56 report form
+│   ├── ReferralCapture.tsx   ← ?ref= first-touch capture (mounts in App)
 │   ├── SearchSkeleton.tsx    ← loading skeletons
 │   ├── SubmitToIndex.tsx     ← community submission dialog
 │   └── auth/                 ← Nostr login (signup, NIP-07, nsec, NIP-46)
 ├── pages/
 │   ├── Index.tsx             ← hero + results (the whole search UX)
-│   ├── Settings.tsx          ← theme, indexing, AI, relays
-│   ├── Admin.tsx             ← team console (stats/reports/moderation/AI/roles)
+│   ├── Settings.tsx          ← theme, indexing, AI, relays (+ discovery)
+│   ├── Admin.tsx             ← team console (stats/reports/moderation/AI/
+│   │                           affiliates/invites/roles)
+│   ├── Invite.tsx            ← referral links + partner stats
 │   └── NIP19Page.tsx         ← profile/event rendering for /:nip19
 └── scripts/
     └── seed-import.ts        ← corpus → SIP-01 observations (npm run seed)

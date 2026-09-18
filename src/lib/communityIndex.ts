@@ -25,15 +25,16 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import type { SearchResult } from '@/lib/providers/types';
 import { detectContentType, contentTypeLabel, isValidSubmissionUrl, type ContentType } from '@/lib/contentType';
+import { APP_PROTOCOL } from '@/lib/appProfile';
 
 /** Kind used for community submissions (NIP-78 application data). */
 export const COMMUNITY_KIND = 30078;
 
 /** t-tag marking community submissions. */
-export const COMMUNITY_T_TAG = 'uncaged-submit';
+export const COMMUNITY_T_TAG = APP_PROTOCOL.communitySubmitTag;
 
 /** d-tag namespace prefix for submissions. */
-export const COMMUNITY_D_PREFIX = 'uncaged:submit:';
+export const COMMUNITY_D_PREFIX = APP_PROTOCOL.communitySubmitPrefix;
 
 /* ------------------------------------------------------------------ */
 /* Building                                                            */

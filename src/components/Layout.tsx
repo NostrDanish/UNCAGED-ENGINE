@@ -85,6 +85,7 @@ export function Layout({ children, minimal = false }: LayoutProps) {
             <span>A Nostr search engine template</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link to="/invite" className="hover:text-foreground transition-colors">Invite</Link>
             <a
               href="https://github.com/NostrDanish/UNCAGED-ENGINE"
               target="_blank"

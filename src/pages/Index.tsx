@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Search } from 'lucide-react';
@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useProviderSearch } from '@/hooks/useProviderSearch';
 import { useAIAnswer } from '@/hooks/useAIAnswer';
 import { useSearchHotkeys } from '@/hooks/useSearchHotkeys';
+import { refreshDiscoveredRelays } from '@/lib/relayDiscovery';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -28,6 +29,12 @@ const Index = () => {
 
   // Global hotkeys: Ctrl+K / Cmd+K and "/" focus the search bar.
   useSearchHotkeys();
+
+  // Relay auto-discovery: refresh the NIP-11-verified pool in the
+  // background (24h cache, additive only — defaults keep working).
+  useEffect(() => {
+    void refreshDiscoveredRelays();
+  }, []);
 
   const {
     results,

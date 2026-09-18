@@ -29,6 +29,7 @@ import { LoginArea } from '@/components/auth/LoginArea';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { APP_PROFILE } from '@/lib/appProfile';
 import { buildSubmissionEvent } from '@/lib/communityIndex';
 import { publishIndexObservation } from '@/lib/indexPublisher';
 import { detectContentType, contentTypeLabel, isValidSubmissionUrl, type ContentType } from '@/lib/contentType';
@@ -122,7 +123,7 @@ export function SubmitToIndex({ open, onOpenChange }: SubmitToIndexProps) {
             tags,
             type: SIP01_TYPE[type],
             network: type === 'onion' ? 'tor' : undefined,
-            source: 'uncaged-engine-submit/1',
+            source: APP_PROFILE.sip.submitterSource,
           });
 
           toast({

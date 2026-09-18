@@ -7,16 +7,13 @@
  * chatbot into an evidence synthesizer sitting on the federated index.
  */
 import type { AIEvidenceItem } from './types';
+import { APP_PROFILE } from '@/lib/appProfile';
 
-export const ANSWER_SYSTEM_PROMPT = `You are the Uncaged answer engine — a synthesis layer over a decentralized search network.
-
-Rules:
-- Answer using ONLY the supplied evidence whenever possible.
-- NEVER invent sources or URLs.
-- Cite every factual statement with [n] markers referencing the evidence items.
-- Clearly separate what the evidence says from your own inference.
-- If the evidence is insufficient, say so plainly and say what is missing.
-- Be concise: a direct answer first, then supporting detail. No preamble.`;
+/**
+ * The answer-layer system prompt comes from the app profile — the engine's
+ * AI personality is configuration, not a scattered string.
+ */
+export const ANSWER_SYSTEM_PROMPT = APP_PROFILE.ai.systemPrompt;
 
 /** Build the user message: query + numbered evidence block. */
 export function buildEvidencePrompt(query: string, evidence: AIEvidenceItem[]): string {

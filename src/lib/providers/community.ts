@@ -14,21 +14,22 @@ import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { getSearchRelayUrls } from '@/lib/appRelays';
 import { getSearchRelay } from '@/lib/searchRelays';
 import { COMMUNITY_KIND, COMMUNITY_T_TAG, parseSubmissionEvent } from '@/lib/communityIndex';
+import { parseQuery } from '@/lib/queryParser';
+import { matchesDoc } from '@/lib/queryEval';
 import type { SearchProvider, SearchOptions, ProviderSearchResponse, SearchResult } from './types';
 
 /** How many recent events to pull before client-side filtering. */
 const FETCH_LIMIT = 150;
 
-/** Does this result match the query? AND-match across searchable fields. */
-function matchesQuery(result: SearchResult, terms: string[]): boolean {
-  if (terms.length === 0) return true;
-  const haystack = [
-    result.title,
-    result.snippet,
-    result.url,
-    ...(result.tags ?? []),
-  ].join(' ').toLowerCase();
-  return terms.every((t) => haystack.includes(t));
+/** Does this result satisfy the (structured) query? */
+function matchesQuery(result: SearchResult, parsed: ReturnType<typeof parseQuery>): boolean {
+  return matchesDoc(parsed, {
+    title: result.title,
+    description: result.snippet,
+    url: result.url,
+    topics: result.tags ?? [],
+    observedAt: result.timestamp,
+  });
 }
 
 export const communityProvider: SearchProvider = {
@@ -61,13 +62,13 @@ export const communityProvider: SearchProvider = {
       }
     }
 
-    const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length >= 2);
+    const parsed = parseQuery(query);
 
     // Parse, dedupe by URL (keep newest), filter by query, sort by recency.
     const byUrl = new Map<string, SearchResult>();
     for (const ev of events.values()) {
       const result = parseSubmissionEvent(ev);
-      if (!result || !matchesQuery(result, terms)) continue;
+      if (!result || !matchesQuery(result, parsed)) continue;
       const key = result.url.toLowerCase();
       const existing = byUrl.get(key);
       if (!existing || (result.timestamp ?? 0) > (existing.timestamp ?? 0)) {

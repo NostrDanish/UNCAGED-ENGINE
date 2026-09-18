@@ -16,12 +16,15 @@
  *      never in the bundle, localStorage, or any API response. Available
  *      only when the operator deployed a proxy AND configured it (status
  *      comes from GET /api/ai/status).
- *   3. BUILT-IN FALLBACK — a shared, rate-limited PPQ key with a locked
- *      model, so AI answers work out of the box on any deployment
- *      (including static hosting with no worker). The key is public by
- *      design — it ships in the bundle and must stay rate-limited; the
- *      engine tier exists for operators who want a private key.
- *   4. AI UNAVAILABLE — only if the built-in key is removed (forks).
+ *   3. AI UNAVAILABLE — no usable credential exists.
+ *
+ * SECURITY (hard rule): NO provider API key ships in this repository or the
+ * frontend bundle. The user's key stays in their browser's localStorage;
+ * the operator's key stays server-side in the deployment's secret store
+ * (worker env / KV). The future home for operator-side provider secrets is
+ * a signer/proxy service (0xSigner pattern): the browser only ever calls a
+ * same-origin, key-injecting proxy — never a provider directly with a
+ * shared credential.
  */
 
 import { getAIProvider } from '@/lib/ai/registry';
@@ -31,15 +34,6 @@ export type { EngineAIStatus } from '@/lib/ai/engineProxy';
 
 /** Same-origin base of the engine-AI proxy (served by the deployment's worker). */
 export const ENGINE_AI_BASE = '/api/ai';
-
-/** Built-in free tier — shared, rate-limited PPQ key. Provider + model are
- *  locked on this tier. PUBLIC BY DESIGN (ships in the bundle): it exists so
- *  AI works with zero setup; abuse is bounded by the key's own rate limits.
- *  Forks: empty the key to disable the tier (falls through to 'unavailable'). */
-export const COMMUNITY_AI_PROVIDER_ID = 'ppq';
-export const COMMUNITY_AI_ENDPOINT = 'https://api.ppq.ai/v1';
-export const COMMUNITY_AI_KEY = 'sk-VPVVNlf79DvGjUfjjrHeFT';
-export const COMMUNITY_AI_MODEL = 'qwen/qwen-2.5-7b-instruct';
 
 const LS_KEY = 'uncaged:ai-config';
 
@@ -78,8 +72,8 @@ export interface ResolvedAIConfig {
   endpoint: string;
   apiKey: string;
   model: string;
-  /** Which tier answered: user's own key → engine proxy → built-in → none. */
-  tier: 'user' | 'engine' | 'keyless' | 'community' | 'unavailable';
+  /** Which tier answered: user's own key → engine proxy → none. */
+  tier: 'user' | 'engine' | 'keyless' | 'unavailable';
   /** Engine-tier display info (provider label + model), when tier='engine'. */
   engine?: { providerName?: string; model?: string };
 }
@@ -94,8 +88,7 @@ export function engineAIAvailable(engine: EngineAIStatus | null | undefined): bo
  *  1. user's own key            → their provider/endpoint/model
  *  2. keyless provider selected → their config as-is (e.g. local Ollama)
  *  3. engine configured+enabled → the same-origin proxy (no key, server model)
- *  4. built-in key present      → shared free tier (locked provider+model)
- *  5. otherwise                 → AI unavailable
+ *  4. otherwise                 → AI unavailable
  */
 export function resolveAIConfig(cfg: AIConfig, engine?: EngineAIStatus | null): ResolvedAIConfig {
   if (hasOwnAIKey(cfg)) {
@@ -127,16 +120,6 @@ export function resolveAIConfig(cfg: AIConfig, engine?: EngineAIStatus | null): 
       model: engine.model || 'auto',
       tier: 'engine',
       engine: { providerName: engine.providerName, model: engine.model },
-    };
-  }
-
-  if (COMMUNITY_AI_KEY) {
-    return {
-      providerId: COMMUNITY_AI_PROVIDER_ID,
-      endpoint: COMMUNITY_AI_ENDPOINT,
-      apiKey: COMMUNITY_AI_KEY,
-      model: COMMUNITY_AI_MODEL, // locked on this tier — user's model choice ignored
-      tier: 'community',
     };
   }
 

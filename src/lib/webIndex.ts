@@ -20,6 +20,7 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import type { SearchResult } from '@/lib/providers/types';
+import { APP_PROFILE } from '@/lib/appProfile';
 
 /** Web Index Observation kind (addressable). Draft allocation — see spec §2. */
 export const WEB_INDEX_KIND = 39697;
@@ -362,7 +363,7 @@ export function observationFromResult(result: SearchResult): IndexObservationInp
     image: result.thumbnail,
     tags: result.tags,
     published: result.timestamp,
-    source: 'uncaged-engine/1',
+    source: APP_PROFILE.sip.indexerSource,
   };
 }
 
@@ -400,6 +401,6 @@ export function observationFromNostrResult(result: SearchResult): IndexObservati
     image: isFile ? result.thumbnail : undefined,
     tags: result.tags,
     published: result.timestamp,
-    source: 'uncaged-engine/1',
+    source: APP_PROFILE.sip.indexerSource,
   };
 }

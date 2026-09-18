@@ -13,8 +13,19 @@ schemas of its own:
 | Team Role List | **30078** | addressable (NIP-78) | this file, §5 |
 | Un-hide (retract a label) | **5** | regular (NIP-09) | this file, §3 |
 | Engine-AI admin auth | **27235** | regular (NIP-98-flavored) | this file, §6 |
+| Affiliate Rule Config | **30078** | addressable (NIP-78) | this file, §7 |
+| Referral Ping | **34967** | addressable | this file, §7 |
+| Affiliate Click | **6079** | regular | this file, §7 |
+| Referral Config | **30078** | addressable (NIP-78) | this file, §7 |
 
 All published events carry an `alt` tag with a human-readable description.
+
+**Namespace isolation:** every application schema lives under `uncaged:*` /
+`uncaged.*` / the `uncaged-*` t-tag (centralized in `src/lib/appProfile.ts` →
+`APP_PROTOCOL`). SIP-01 identifiers (`widx:*`, kind 39697) are shared
+protocol ground and never renamed. Kinds 34967/6079 are shared with other
+Dsearch-family engines; this app's records carry `t: uncaged-referral` and
+readers filter on it — referral data never mixes across engines.
 
 ---
 
@@ -218,7 +229,40 @@ authenticated path.
 **Note:** the AI answer layer writes nothing to Nostr — answers are
 ephemeral and never indexed into SIP-01.
 
-## 7. Standard kinds searched (read-only)
+## 7. Reference system — referrals & affiliate rules
+
+The invite/affiliate architecture (ported from the Dsearch-family core into
+the `uncaged` namespace). Three pieces:
+
+**Affiliate rules** (`uncaged:affiliate-rules`, kind 30078) — one
+owner/admin-signed addressable event whose content is a JSON rule list:
+`{ "host": "amazon.ca", "mode": "param", "params": { "tag": "code" } }` or
+`{ "host": "ppq.ai", "mode": "redirect", "target": "https://…/invite/code" }`.
+Every client reads it (trust = owner + owner-signed admin list) and rewrites
+matching outbound result URLs (`src/lib/affiliates.ts`,
+`src/hooks/useAffiliates.ts`). Managed in Admin → Affiliates. Rules never
+strip a URL's existing parameters — tagging only adds/replaces the rule's
+own names; only http(s) URLs are taggable.
+
+**Referral ping** (kind 34967) — when a visitor first arrives via
+`?ref=<npub>`, one addressable event (`d` = partner pubkey, `p` = partner,
+`t` = `uncaged-referral`) records the first-touch attribution. Signed by a
+dedicated per-device analytics key — NOT the user's account key and NOT the
+SIP-01 indexer identity (`src/lib/referrals.ts`). Self-referrals rejected;
+first-touch wins within the owner-configured window.
+
+**Affiliate click** (kind 6079) — one event per click on an
+affiliate-tagged result from a referred device (`p` = partner, `host` =
+merchant, `t` = `uncaged-referral`). Fire-and-forget; never blocks a click.
+
+**Referral config** (`uncaged:referral-config`, kind 30078) — owner/admin
+program settings (`enabled`, `attributionWindowDays`), managed in Admin →
+Invites, read by every visitor's `ReferralCapture`.
+
+Honesty: ping/click events are public and forgeable by design — they are
+indicative engagement metrics, never settlement data.
+
+## 8. Standard kinds searched (read-only)
 
 The Nostr provider (`src/lib/providers/nostr.ts`) issues **NIP-50** `search`
 filters against the search relay pool:
@@ -241,7 +285,7 @@ by `src/pages/NIP19Page.tsx`.
 
 ---
 
-## 8. Other NIPs in play
+## 9. Other NIPs in play
 
 | NIP | Kind / feature | Where |
 |-----|----------------|-------|
@@ -255,10 +299,12 @@ by `src/pages/NIP19Page.tsx`.
 | NIP-46 | remote signer (nostrconnect / bunker) | `src/components/auth/` |
 | NIP-42 | relay AUTH (signed 22242 challenge responses) | `src/components/NostrProvider.tsx` |
 | NIP-98 | flavor of the engine-AI admin auth (kind 27235, signed URL+method binding) | `src/lib/ai/engineProxy.ts` |
+| NIP-66 | relay announcements (kind 30166) — relay discovery candidates | `src/lib/relayDiscovery.ts` |
+| NIP-11 | relay information documents — capability verification (`supported_nips`, `uncaged_index` block) | `src/lib/relayDiscovery.ts` |
 
 ---
 
-## 9. Trust model
+## 10. Trust model
 
 - **Index observations (39697):** trusted *structurally* — any indexer pubkey
   is accepted; events are self-signed statements about public metadata and

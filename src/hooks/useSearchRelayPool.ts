@@ -14,12 +14,20 @@ import {
   removeSearchRelay,
   restoreDefaultSearchRelays,
   getRemovedSearchRelays,
+  getCustomSearchRelays,
   getSearchRelayUrls,
   isDefaultSearchRelay,
 } from '@/lib/appRelays';
+import {
+  getDiscoveredSearchRelays,
+  getDiscoveredIndexRelays,
+  isRelayDiscoveryEnabled,
+  setRelayDiscoveryEnabled,
+  refreshDiscoveredRelays,
+} from '@/lib/relayDiscovery';
 import { getSearchRelay } from '@/lib/searchRelays';
 
-export type SearchRelayOrigin = 'default' | 'custom';
+export type SearchRelayOrigin = 'default' | 'custom' | 'discovered';
 export type SearchRelayStatus = 'untested' | 'testing' | 'ok' | 'error';
 
 export interface SearchRelayEntry {
@@ -30,9 +38,10 @@ export interface SearchRelayEntry {
 }
 
 function buildPool(): SearchRelayEntry[] {
+  const customs = new Set(getCustomSearchRelays());
   return getSearchRelayUrls().map((url): SearchRelayEntry => ({
     url,
-    origin: isDefaultSearchRelay(url) ? 'default' : 'custom',
+    origin: isDefaultSearchRelay(url) ? 'default' : customs.has(url) ? 'custom' : 'discovered',
     status: 'untested',
   }));
 }
@@ -62,6 +71,34 @@ export function useSearchRelayPool() {
     restoreDefaultSearchRelays();
     setPool(buildPool());
     setRemovedCount(0);
+  }, []);
+
+  /* ── Relay auto-discovery (NIP-66 + NIP-11 verified) ── */
+  const [discoveryEnabled, setDiscoveryEnabled] = useState(() => isRelayDiscoveryEnabled());
+  const [discovering, setDiscovering] = useState(false);
+  /** Count of verified discovered relays currently feeding the pools. */
+  const discoveredCount = new Set([...getDiscoveredSearchRelays(), ...getDiscoveredIndexRelays()]).size;
+
+  const toggleDiscovery = useCallback((enabled: boolean) => {
+    setRelayDiscoveryEnabled(enabled);
+    setDiscoveryEnabled(enabled);
+    if (enabled) {
+      setDiscovering(true);
+      void refreshDiscoveredRelays(true).finally(() => {
+        setDiscovering(false);
+        setPool(buildPool());
+      });
+    } else {
+      setPool(buildPool());
+    }
+  }, []);
+
+  const rediscover = useCallback(() => {
+    setDiscovering(true);
+    void refreshDiscoveredRelays(true).finally(() => {
+      setDiscovering(false);
+      setPool(buildPool());
+    });
   }, []);
 
   /** Ping every relay with a limit-1 query and record latency/status. */
@@ -96,5 +133,5 @@ export function useSearchRelayPool() {
     setTesting(false);
   }, [pool]);
 
-  return { pool, testing, testRelays, addRelay, removeRelay, restoreDefaults, removedCount };
+  return { pool, testing, testRelays, addRelay, removeRelay, restoreDefaults, removedCount, discoveryEnabled, discovering, discoveredCount, toggleDiscovery, rediscover };
 }

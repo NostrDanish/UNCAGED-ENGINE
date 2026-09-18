@@ -11,7 +11,7 @@ import { useSeoMeta } from '@unhead/react';
 import {
   Settings as SettingsIcon, Sun, Moon, Monitor,
   Plus, Trash2, RefreshCw, RotateCcw, Globe, Fingerprint, Copy, Download,
-  CheckCircle2, XCircle, CircleDashed, Check, Zap, Sparkles, Lock,
+  CheckCircle2, XCircle, CircleDashed, Check, Zap, Sparkles, Lock, Radar,
 } from 'lucide-react';
 
 import { Layout } from '@/components/Layout';
@@ -35,7 +35,7 @@ import { useSearchRelayPool } from '@/hooks/useSearchRelayPool';
 import { useEngineAIStatus } from '@/hooks/useEngineAIStatus';
 import { AI_PROVIDERS, getAIProvider, PPQ_INVITE_URL } from '@/lib/ai/registry';
 import {
-  COMMUNITY_AI_MODEL, getAIConfig, hasOwnAIKey, resolveAIConfig, setAIConfig, type AIConfig,
+  getAIConfig, hasOwnAIKey, resolveAIConfig, setAIConfig, type AIConfig,
 } from '@/lib/aiConfig';
 import type { AIModel } from '@/lib/ai/types';
 import {
@@ -275,11 +275,10 @@ function AISection() {
   /** Keyless providers (Ollama) run their own config even without a key. */
   const keylessProvider = provider?.requiresKey === false;
   const { status: engineStatus } = useEngineAIStatus();
-  /** Active tier per the precedence chain: user → engine → built-in → none. */
+  /** Active tier per the precedence chain: user → engine → none. */
   const tier = resolveAIConfig(cfg, engineStatus).tier;
   const onEngine = tier === 'engine';
-  const onCommunity = tier === 'community';
-  const locked = !ownKey && !keylessProvider; // engine/built-in tier or unavailable
+  const locked = !ownKey && !keylessProvider; // engine tier or unavailable
   const ready = cfg.enabled && tier !== 'unavailable';
 
   const save = (patch: Partial<AIConfig>) => {
@@ -378,38 +377,7 @@ function AISection() {
             </Card>
           )}
 
-          {/* Built-in free tier — the zero-setup fallback (locked model) */}
-          {onCommunity && (
-            <Card className="mb-4 border-primary/25 bg-primary/[0.04]">
-              <CardContent className="py-4 flex items-start gap-4">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0 border bg-primary/10 border-primary/30 text-primary">
-                  <Lock className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">Free built-in tier</span>
-                    <Badge variant="outline" className="text-[10px] border-green-500/30 text-green-600 dark:text-green-500">
-                      Active
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Answers run on the built-in shared key — free for everyone, rate-limited.
-                    Provider and model are locked on this tier:
-                  </p>
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary" className="text-[10px] font-mono">PPQ.ai</Badge>
-                    <Badge variant="secondary" className="text-[10px] font-mono">{COMMUNITY_AI_MODEL}</Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/70 mt-2 leading-relaxed">
-                    If this deployment's operator configures engine AI it takes over this tier;
-                    pasting your own key below overrides everything.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* No engine, no built-in, no user key (forks without the key) */}
+          {/* No engine, no user key */}
           {tier === 'unavailable' && (
             <Card className="mb-4 border-dashed border-border/60">
               <CardContent className="py-4 flex items-start gap-4">
@@ -446,12 +414,10 @@ function AISection() {
                 />
                 <p className="text-[11px] text-muted-foreground/70">
                   {ownKey
-                    ? 'Using your own AI provider — engine/built-in tiers are paused.'
+                    ? 'Using your own AI provider — the engine tier is paused.'
                     : onEngine
                       ? 'Empty = engine-provided AI. Paste a key to use your own provider instead.'
-                      : onCommunity
-                        ? 'Empty = free built-in tier. Paste a key to unlock provider + model choice.'
-                        : 'Paste a key to activate AI answers.'}
+                      : 'Paste a key to activate AI answers.'}
                   {cfg.providerId === 'ppq' && !ownKey && (
                     <>
                       {' '}No key yet?{' '}
@@ -558,16 +524,14 @@ function AISection() {
                 <p className="text-[11px] text-green-600 dark:text-green-500">
                   {onEngine
                     ? `Active — using engine-provided AI${engineStatus?.model ? ` (${engineStatus.model})` : ''}.`
-                    : onCommunity
-                      ? `Active on the built-in free tier (${COMMUNITY_AI_MODEL}) — shared and rate-limited.`
-                      : keylessProvider && !ownKey
-                        ? 'Active — running against your keyless provider.'
-                        : 'Active on your own key — your next search will include an AI-synthesized answer.'}
+                    : keylessProvider && !ownKey
+                      ? 'Active — running against your keyless provider.'
+                      : 'Active on your own key — your next search will include an AI-synthesized answer.'}
                 </p>
               )}
               {cfg.enabled && tier === 'unavailable' && (
                 <p className="text-[11px] text-amber-600 dark:text-amber-500">
-                  AI answers won't run — no engine AI, no built-in key, and no key of your own yet.
+                  AI answers won't run — no engine-provided AI on this deployment and no key of your own yet.
                 </p>
               )}
             </CardContent>
@@ -610,7 +574,10 @@ function YourRelaysSection() {
 /* ------------------------------------------------------------------ */
 
 function SearchRelaysSection() {
-  const { pool, testing, testRelays, addRelay, removeRelay, restoreDefaults, removedCount } = useSearchRelayPool();
+  const {
+    pool, testing, testRelays, addRelay, removeRelay, restoreDefaults, removedCount,
+    discoveryEnabled, discovering, discoveredCount, toggleDiscovery, rediscover,
+  } = useSearchRelayPool();
   const { toast } = useToast();
   const [newUrl, setNewUrl] = useState('');
 
@@ -668,6 +635,51 @@ function SearchRelaysSection() {
         Add your own relays, or remove any default you don't trust.
       </p>
 
+      {/* Relay auto-discovery (NIP-66 candidates + NIP-11 verification) */}
+      <Card className={cn('mb-4 transition-colors', discoveryEnabled ? 'border-primary/30 bg-primary/5' : 'border-border/60')}>
+        <CardContent className="py-4 flex items-start gap-4">
+          <div className={cn(
+            'flex items-center justify-center w-9 h-9 rounded-lg shrink-0 border',
+            discoveryEnabled ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-muted text-muted-foreground border-border',
+          )}>
+            <Radar className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Relay discovery</span>
+              <div className="flex items-center gap-2">
+                {discoveryEnabled && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={rediscover}
+                    disabled={discovering}
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RefreshCw className={cn('w-3 h-3 mr-1', discovering && 'animate-spin')} />
+                    {discovering ? 'Probing…' : 'Refresh'}
+                  </Button>
+                )}
+                <Switch
+                  checked={discoveryEnabled}
+                  onCheckedChange={toggleDiscovery}
+                  aria-label="Toggle relay discovery"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Finds extra NIP-50 / SIP-01 relays on its own: relay announcements (NIP-66)
+              are collected from Nostr, then each candidate's NIP-11 document is verified
+              before it joins your pool. Only verified relays are added — never unverified
+              announcements. Probes carry no query data.
+              {discoveryEnabled && discoveredCount > 0 && (
+                <span className="text-primary"> {discoveredCount} verified relay{discoveredCount !== 1 ? 's' : ''} active.</span>
+              )}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Add custom */}
       <Card className="mb-4 border-primary/20">
         <CardContent className="py-4">
@@ -710,10 +722,12 @@ function SearchRelaysSection() {
                       'text-[10px] px-1.5 py-0',
                       entry.origin === 'default'
                         ? 'bg-primary/10 text-primary border-primary/30'
-                        : 'bg-muted text-muted-foreground border-border',
+                        : entry.origin === 'discovered'
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-500 border-amber-500/30'
+                          : 'bg-muted text-muted-foreground border-border',
                     )}
                   >
-                    {entry.origin === 'default' ? 'Default' : 'Custom'}
+                    {entry.origin === 'default' ? 'Default' : entry.origin === 'discovered' ? 'Discovered' : 'Custom'}
                   </Badge>
                 </div>
                 {entry.status === 'untested' && (

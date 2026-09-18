@@ -22,32 +22,26 @@ import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { getSearchRelayUrls } from '@/lib/appRelays';
 import { getSearchRelay } from '@/lib/searchRelays';
 import { WEB_INDEX_KIND, parseIndexEvent, verifyObservation, type IndexObservation } from '@/lib/webIndex';
+import { parseQuery } from '@/lib/queryParser';
+import { matchesDoc, type QueryDoc } from '@/lib/queryEval';
 import type { SearchProvider, SearchOptions, ProviderSearchResponse, SearchResult } from './types';
 
 /** How many recent observations to pull per relay. */
 const FETCH_LIMIT = 300;
 
-/**
- * Split the query into plain text terms and relay-side operators.
- * Tokens containing ':' (site:, lang:, after:, …) are NIP-50 extension
- * operators — SIP-01-aware relays apply them server-side, so the
- * client-side matcher ignores them instead of requiring literal matches.
- */
-function splitQuery(query: string): { terms: string[] } {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((t) => t.length >= 2 && !t.includes(':'));
-  return { terms };
-}
-
-/** AND-match across title, description, url, topics. */
-function matchesQuery(obs: IndexObservation, terms: string[]): boolean {
-  if (terms.length === 0) return true;
-  const haystack = [obs.title, obs.description, obs.url, ...obs.topics]
-    .join(' ')
-    .toLowerCase();
-  return terms.every((t) => haystack.includes(t));
+/** Adapt an observation to the evaluator's flat document shape. */
+function toDoc(obs: IndexObservation): QueryDoc {
+  return {
+    title: obs.title,
+    description: obs.description,
+    url: obs.url,
+    topics: obs.topics,
+    language: obs.language,
+    type: obs.extensions.type,
+    mime: obs.extensions.mime,
+    published: obs.published,
+    observedAt: obs.observedAt,
+  };
 }
 
 function extractDomain(url: string): string {
@@ -123,11 +117,14 @@ export const webIndexProvider: SearchProvider = {
       .filter((o): o is IndexObservation => o !== null);
 
     const groups = groupByDocument(observations);
-    const { terms } = splitQuery(query);
+    // Structured query (AND/OR/NOT, "phrases", site:/lang:/type:/tag:/
+    // before:/after:) parsed once and enforced client-side — operators
+    // behave identically whether or not a relay understands them.
+    const parsed = parseQuery(query);
 
     // Match groups client-side, then integrity-check the displayed
     // observation (d ↔ u, x ↔ content — spec §18 step 2).
-    const candidates = [...groups.values()].filter((group) => matchesQuery(group.latest, terms));
+    const candidates = [...groups.values()].filter((group) => matchesDoc(parsed, toDoc(group.latest)));
     const verified = await Promise.all(
       candidates.map(async (group) => ((await verifyObservation(group.latest)) ? group : null)),
     );

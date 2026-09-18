@@ -5,6 +5,10 @@
  * results become a numbered evidence pack → the configured AI provider
  * synthesizes an answer with [n] citations back to that evidence.
  *
+ * Credential order: the user's own key → a keyless provider (local Ollama)
+ * → the engine-provided same-origin proxy. No provider key ever ships in
+ * the bundle (see src/lib/aiConfig.ts).
+ *
  * Boundaries (deliberate, per the project model):
  *   - Runs only for 'text' query class — NIP-19/05 and URL queries keep
  *     their deterministic paths and never leave for an AI provider.
@@ -83,7 +87,7 @@ export function useAIAnswer(query: string, results: SearchResult[], enabled: boo
   const queryClass = classifyQuery(query);
 
   // AI runs when: enabled by user, a text-class query, evidence, and a
-  // usable tier (user key / keyless provider / engine proxy / built-in).
+  // usable tier (user key / keyless provider / engine proxy).
   const evidence = buildEvidence(results, aiConfig.includeNostr);
   const shouldRun =
     enabled &&
@@ -92,8 +96,7 @@ export function useAIAnswer(query: string, results: SearchResult[], enabled: boo
     evidence.length >= 2 &&
     (resolved.tier === 'user'
       || resolved.tier === 'keyless'
-      || resolved.tier === 'engine'
-      || resolved.tier === 'community');
+      || resolved.tier === 'engine');
 
   const { data, isLoading, error } = useQuery<AIAnswer>({
     queryKey: ['ai-answer', query, resolved.providerId, resolved.model, resolved.tier, evidence.map((e) => e.url).join('|')],

@@ -30,6 +30,8 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { normalizeIndexUrl } from '@/lib/webIndex';
 import { APP_RELAYS, getIndexPublishRelays, getSearchRelayUrls } from '@/lib/appRelays';
+import { queryRelayPool } from '@/lib/searchRelays';
+import { APP_PROTOCOL, type AppTeamRole } from '@/lib/appProfile';
 
 /** Relays moderation data (labels, role lists, reports) is read from. */
 export function getModerationRelayUrls(): string[] {
@@ -50,13 +52,13 @@ export const OWNER_PUBKEY = 'c45041618951bb6012ac23f5cdf3d740465f2d640be841fd9bb
 export const MODERATION_KIND = 1985;
 
 /** Label namespace for moderation actions. */
-export const MODERATION_NS = 'uncaged.moderation';
+export const MODERATION_NS = APP_PROTOCOL.moderation;
 
 /** NIP-56 report kind (abuse reports from result cards). */
 export const REPORT_KIND = 1984;
 
 /** Label namespace for abuse reports. */
-export const REPORT_NS = 'uncaged.abuse';
+export const REPORT_NS = APP_PROTOCOL.abuse;
 
 /* ------------------------------------------------------------------ */
 /* Roles (owner-managed team lists)                                    */
@@ -68,11 +70,12 @@ export const REPORT_NS = 'uncaged.abuse';
  * signature only — the d-tag alone is not a trust boundary.
  */
 export const ROLES_KIND = 30078;
-export const ADMIN_ROLES_D_TAG = 'uncaged:admin-roles';
-export const MOD_ROLES_D_TAG = 'uncaged:mod-roles';
-export const ROLES_T_TAG = 'uncaged-roles';
+export const ADMIN_ROLES_D_TAG = APP_PROTOCOL.adminRoles;
+export const MOD_ROLES_D_TAG = APP_PROTOCOL.moderatorRoles;
+export const ROLES_T_TAG = APP_PROTOCOL.rolesTag;
 
-export type AppRole = 'owner' | 'admin' | 'moderator' | 'user';
+/** Team role union — canonical definition lives in appProfile.ts. */
+export type AppRole = AppTeamRole;
 
 /** Parse a role list event. Owner signature enforced by the caller's filter. */
 export function parseRoleList(event: NostrEvent): string[] {
@@ -103,6 +106,44 @@ export function buildRoleListEvent(dTag: string, pubkeys: string[]): {
       ['alt', `Uncaged Engine ${label} list`],
     ],
   };
+}
+
+/**
+ * Fetch the owner-signed team lists from the moderation relay pool.
+ * Works for anonymous readers too (public control-plane reads — the
+ * affiliate and referral configs need the trust chain before anyone logs
+ * in). Latest event per d-tag wins; owner signature enforced.
+ */
+export async function fetchTeamRoles(
+  signal: AbortSignal,
+): Promise<{ admins: string[]; mods: string[] }> {
+  const settled = await queryRelayPool(
+    getModerationRelayUrls(),
+    [{
+      kinds: [ROLES_KIND],
+      authors: [OWNER_PUBKEY], // trust boundary: owner-signed only
+      '#d': [ADMIN_ROLES_D_TAG, MOD_ROLES_D_TAG],
+      limit: 2,
+    }],
+    { signal },
+  );
+
+  const latestByD = new Map<string, NostrEvent>();
+  for (const value of settled) {
+    for (const ev of value) {
+      const d = ev.tags.find(([n]) => n === 'd')?.[1];
+      if (!d) continue;
+      const existing = latestByD.get(d);
+      if (!existing || ev.created_at > existing.created_at) latestByD.set(d, ev);
+    }
+  }
+
+  const read = (d: string): string[] => {
+    const ev = latestByD.get(d);
+    return ev ? parseRoleList(ev) : [];
+  };
+
+  return { admins: read(ADMIN_ROLES_D_TAG), mods: read(MOD_ROLES_D_TAG) };
 }
 
 /* ------------------------------------------------------------------ */
